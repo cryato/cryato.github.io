@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactions Viewer</title>
+  <style>
+    :root { --bg: #0f172a; --panel: #111827; --muted: #94a3b8; --text: #e5e7eb; --primary: #22d3ee; --accent: #8b5cf6; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial; background: linear-gradient(180deg, #0b1022 0%, #0f172a 100%); color: var(--text); }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #1f2937; position: sticky; top: 0; background: rgba(17,24,39,0.6); backdrop-filter: blur(8px); z-index: 10; }
+    header h1 { font-size: 16px; margin: 0; }
+    .toolbar { display: flex; gap: 8px; align-items: center; }
+    input[type="text"], input[type="date"] { background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 8px 10px; border-radius: 8px; outline: none; font-size: 13px; }
+    .btn { appearance: none; border: 1px solid #283449; background: linear-gradient(180deg, #0b1224 0%, #0a1222 100%); color: #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+    .container { display: grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 16px; }
+    .panel { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; }
+    .left { padding: 12px; }
+    .field { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 8px; margin: 8px 0; }
+    .label { color: var(--muted); font-size: 12px; }
+    .list { height: calc(100vh - 120px); overflow: auto; padding: 12px; }
+    .run { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .steps { margin-top: 10px; padding-left: 6px; border-left: 2px solid #334155; }
+    .step { font-size: 12px; color: #cbd5e1; margin: 6px 0; }
+    a { color: #93c5fd; }
+    .empty { color: var(--muted); padding: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Interactions</h1>
+    <div class="toolbar">
+      <button id="btnReload" class="btn">Reload</button>
+      <a class="btn" href="conversations.html">Conversations</a>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="panel left">
+      <div class="field">
+        <div class="label">Request ID</div>
+        <input id="inpRequestId" type="text" placeholder="request_id (optional)" />
+      </div>
+      <div class="field">
+        <div class="label">Customer ID</div>
+        <input id="inpUserId" type="text" placeholder="user_id (optional)" />
+      </div>
+      <div class="field">
+        <div class="label">Start</div>
+        <input id="inpStart" type="date" />
+      </div>
+      <div class="field">
+        <div class="label">End</div>
+        <input id="inpEnd" type="date" />
+      </div>
+      <div class="field">
+        <div></div>
+        <button id="btnApply" class="btn">Apply</button>
+      </div>
+      <div style="margin-top:12px; color: var(--muted); font-size: 12px;">URL: interactions.html?request_id=abc&start=2024-01-01&end=2024-01-31</div>
+    </div>
+    <div class="panel">
+      <div id="list" class="list"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
+    import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+    import { getFirestore, collection, query, where, orderBy, limit, startAfter, Timestamp, getDocs, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+
+    function getConfig() {
+      const u = new URL(location.href);
+      const p = (k) => u.searchParams.get(k) || '';
+      return { apiKey: p('apiKey') || '', authDomain: p('authDomain') || '', projectId: p('projectId') || '' };
+    }
+
+    const cfg = getConfig();
+    const app = initializeApp({ apiKey: cfg.apiKey, authDomain: cfg.authDomain, projectId: cfg.projectId });
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const els = {
+      inpRequestId: document.getElementById('inpRequestId'),
+      inpUserId: document.getElementById('inpUserId'),
+      inpStart: document.getElementById('inpStart'),
+      inpEnd: document.getElementById('inpEnd'),
+      btnApply: document.getElementById('btnApply'),
+      btnReload: document.getElementById('btnReload'),
+      list: document.getElementById('list')
+    };
+
+    const url = new URL(location.href);
+    const initialRequestId = url.searchParams.get('request_id') || '';
+    const initialUserId = url.searchParams.get('user_id') || '';
+    if (initialRequestId) els.inpRequestId.value = initialRequestId;
+    if (initialUserId) els.inpUserId.value = initialUserId;
+
+    // default last 7 days
+    const today = new Date();
+    const startDefault = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const toDateInput = (d) => d.toISOString().slice(0, 10);
+    els.inpStart.value = url.searchParams.get('start') || toDateInput(startDefault);
+    els.inpEnd.value = url.searchParams.get('end') || toDateInput(today);
+
+    let paging = { last: null, done: false, pageSize: 30 };
+
+    function coerce(val) {
+      const n = Number(val);
+      return Number.isFinite(n) ? n : val;
+    }
+
+    function renderEmpty() {
+      els.list.innerHTML = '<div class="empty">No runs</div>';
+    }
+
+    function renderRuns(docs, { prepend } = { prepend: false }) {
+      const frag = document.createDocumentFragment();
+      docs.forEach((doc) => {
+        const d = doc.data();
+        const div = document.createElement('div');
+        div.className = 'run';
+        const trigAt = d.flow_trigger && d.flow_trigger.triggered_at ? new Date(d.flow_trigger.triggered_at) : null;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const reqLink = `<a href="interactions.html?request_id=${encodeURIComponent(d.request_id)}">${d.request_id}</a>`;
+        const chatLink = `<a href="conversations.html?user_id=${encodeURIComponent(d.chat_id)}">${d.chat_id}</a>`;
+        meta.innerHTML = `${trigAt ? trigAt.toLocaleString() : ''} · request: ${reqLink} · user: ${chatLink} · flow: ${d.flow_key}`;
+
+        div.appendChild(meta);
+
+        // steps
+        const steps = Array.isArray(d.steps) ? d.steps : [];
+        if (steps.length > 0) {
+          const stepsWrap = document.createElement('div');
+          stepsWrap.className = 'steps';
+          steps.forEach((s) => {
+            const line = document.createElement('div');
+            line.className = 'step';
+            if (s.type === 'message') {
+              const when = s.date ? new Date(s.date) : null;
+              line.textContent = `[${when ? when.toLocaleString() : ''}] message from ${s.from} (message_id=${s.message_id}) step=${s.step_index}`;
+            } else if (s.type === 'trigger') {
+              line.textContent = `trigger -> ${s.triggered_flow_key} child=${s.child_request_id}`;
+            } else if (s.type === 'goto') {
+              line.textContent = `goto -> ${s.label}`;
+            } else {
+              line.textContent = JSON.stringify(s);
+            }
+            stepsWrap.appendChild(line);
+          });
+          div.appendChild(stepsWrap);
+        }
+
+        frag.appendChild(div);
+      });
+
+      if (prepend) {
+        const prevHeight = els.list.scrollHeight;
+        els.list.insertBefore(frag, els.list.firstChild);
+        const newHeight = els.list.scrollHeight;
+        els.list.scrollTop += (newHeight - prevHeight);
+      } else {
+        els.list.innerHTML = '';
+        els.list.appendChild(frag);
+        els.list.scrollTop = 0;
+      }
+    }
+
+    function buildRunsQuery({ requestId, userId, startDate, endDate }) {
+      const col = collection(db, 'interactions');
+      const constraints = [];
+      if (requestId) constraints.push(where('request_id', '==', requestId));
+      if (userId) constraints.push(where('chat_id', '==', coerce(userId)));
+      // order by trigger time desc if filtering by date; otherwise order by request_id desc fallback
+      constraints.push(orderBy('flow_trigger.triggered_at', 'desc'));
+      if (startDate) constraints.push(where('flow_trigger.triggered_at', '>=', startDate.toISOString()));
+      if (endDate) {
+        const end = new Date(endDate.getTime());
+        end.setHours(23,59,59,999);
+        constraints.push(where('flow_trigger.triggered_at', '<=', end.toISOString()));
+      }
+      constraints.push(limit(paging.pageSize));
+      if (paging.last) constraints.push(startAfter(paging.last));
+      return query(col, ...constraints);
+    }
+
+    async function loadInitial() {
+      const requestId = els.inpRequestId.value.trim();
+      const userId = els.inpUserId.value.trim();
+      paging = { last: null, done: false, pageSize: 30 };
+      const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
+      const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
+
+      if (requestId) {
+        // load a single doc view
+        const docRef = doc(db, 'interactions', requestId);
+        const snap = await getDoc(docRef);
+        if (!snap.exists()) { renderEmpty(); return; }
+        renderRuns([snap], { prepend: false });
+        return;
+      }
+
+      const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
+      const snap = await getDocs(q);
+      if (snap.empty) { renderEmpty(); return; }
+      const docs = snap.docs;
+      paging.last = docs[docs.length - 1];
+      renderRuns(docs, { prepend: false });
+    }
+
+    async function loadMore() {
+      if (paging.done) return;
+      const requestId = els.inpRequestId.value.trim();
+      if (requestId) { paging.done = true; return; }
+      const userId = els.inpUserId.value.trim();
+      const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
+      const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
+      const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
+      const snap = await getDocs(q);
+      if (snap.empty) { paging.done = true; return; }
+      const docs = snap.docs;
+      paging.last = docs[docs.length - 1];
+      renderRuns(docs, { prepend: true });
+    }
+
+    els.list.addEventListener('scroll', () => {
+      if (els.list.scrollTop > (els.list.scrollHeight - els.list.clientHeight - 80)) {
+        loadMore();
+      }
+    });
+
+    els.btnApply.addEventListener('click', () => {
+      const u = new URL(location.href);
+      const rid = els.inpRequestId.value.trim();
+      const uid = els.inpUserId.value.trim();
+      const s = els.inpStart.value.trim();
+      const e = els.inpEnd.value.trim();
+      if (rid) u.searchParams.set('request_id', rid); else u.searchParams.delete('request_id');
+      if (uid) u.searchParams.set('user_id', uid); else u.searchParams.delete('user_id');
+      if (s) u.searchParams.set('start', s); else u.searchParams.delete('start');
+      if (e) u.searchParams.set('end', e); else u.searchParams.delete('end');
+      history.replaceState(null, '', u.toString());
+      loadInitial();
+    });
+    document.getElementById('btnReload').addEventListener('click', loadInitial);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) await signInAnonymously(auth);
+      await loadInitial();
+    });
+  </script>
+</body>
+</html>
+
+

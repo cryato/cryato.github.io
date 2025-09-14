@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversations Viewer</title>
+  <style>
+    :root { --bg: #0f172a; --panel: #111827; --muted: #94a3b8; --text: #e5e7eb; --primary: #22d3ee; --accent: #8b5cf6; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial; background: linear-gradient(180deg, #0b1022 0%, #0f172a 100%); color: var(--text); }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #1f2937; position: sticky; top: 0; background: rgba(17,24,39,0.6); backdrop-filter: blur(8px); z-index: 10; }
+    header h1 { font-size: 16px; margin: 0; }
+    .toolbar { display: flex; gap: 8px; align-items: center; }
+    input[type="text"], input[type="date"] { background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 8px 10px; border-radius: 8px; outline: none; font-size: 13px; }
+    .btn { appearance: none; border: 1px solid #283449; background: linear-gradient(180deg, #0b1224 0%, #0a1222 100%); color: #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+    .container { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; }
+    .panel { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; }
+    .left { padding: 12px; }
+    .field { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; margin: 8px 0; }
+    .label { color: var(--muted); font-size: 12px; }
+    .messages { display: flex; flex-direction: column; height: calc(100vh - 120px); overflow: auto; padding: 12px; }
+    .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .bubble-user { border-left: 3px solid #22d3ee; }
+    .bubble-bot { border-left: 3px solid #8b5cf6; }
+    a { color: #93c5fd; }
+    .empty { color: var(--muted); padding: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Conversations</h1>
+    <div class="toolbar">
+      <button id="btnReload" class="btn">Reload</button>
+      <a class="btn" href="interactions.html">Interactions</a>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="panel left">
+      <div class="field">
+        <div class="label">Customer ID</div>
+        <input id="inpUserId" type="text" placeholder="user_id (chat_id)" />
+      </div>
+      <div class="field">
+        <div class="label">Start</div>
+        <input id="inpStart" type="date" />
+      </div>
+      <div class="field">
+        <div class="label">End</div>
+        <input id="inpEnd" type="date" />
+      </div>
+      <div class="field">
+        <div></div>
+        <button id="btnApply" class="btn">Apply</button>
+      </div>
+      <div style="margin-top:12px; color: var(--muted); font-size: 12px;">URL: conversations.html?user_id=123</div>
+    </div>
+    <div class="panel">
+      <div id="messages" class="messages"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
+    import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+    import { getFirestore, collection, query, where, orderBy, limit, startAfter, Timestamp, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+
+    // Configure via URL params for GitHub Pages hosting without secrets in code
+    function getConfigFromHashOrSearch() {
+      const u = new URL(location.href);
+      const p = (k) => u.searchParams.get(k) || '';
+      return {
+        apiKey: p('apiKey') || '',
+        authDomain: p('authDomain') || '',
+        projectId: p('projectId') || '',
+      };
+    }
+
+    const cfg = getConfigFromHashOrSearch();
+    const app = initializeApp({ apiKey: cfg.apiKey, authDomain: cfg.authDomain, projectId: cfg.projectId });
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const els = {
+      inpUserId: document.getElementById('inpUserId'),
+      inpStart: document.getElementById('inpStart'),
+      inpEnd: document.getElementById('inpEnd'),
+      btnApply: document.getElementById('btnApply'),
+      btnReload: document.getElementById('btnReload'),
+      messages: document.getElementById('messages')
+    };
+
+    const url = new URL(location.href);
+    const initialUserId = url.searchParams.get('user_id') || '';
+    if (initialUserId) els.inpUserId.value = initialUserId;
+
+    // default date range: last 7 days
+    const today = new Date();
+    const startDefault = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const toDateInput = (d) => d.toISOString().slice(0, 10);
+    els.inpStart.value = toDateInput(startDefault);
+    els.inpEnd.value = toDateInput(today);
+
+    let paging = { last: null, done: false, pageSize: 30 };
+
+    function coerceUserId(val) {
+      const n = Number(val);
+      return Number.isFinite(n) ? n : val;
+    }
+
+    function buildQuery(userIdRaw, startDate, endDate) {
+      const userId = coerceUserId(userIdRaw);
+      const col = collection(db, 'conversations');
+      const constraints = [ where('chat_id', '==', userId), orderBy('date', 'desc'), limit(paging.pageSize) ];
+      // date is timestampValue in server; when loaded via SDK, it is a Firestore Timestamp
+      if (startDate) constraints.push(where('date', '>=', Timestamp.fromDate(startDate)));
+      if (endDate) {
+        const end = new Date(endDate.getTime());
+        end.setHours(23,59,59,999);
+        constraints.push(where('date', '<=', Timestamp.fromDate(end)));
+      }
+      if (paging.last) constraints.push(startAfter(paging.last));
+      return query(col, ...constraints);
+    }
+
+    function clearAndRenderEmpty() {
+      els.messages.innerHTML = '<div class="empty">No messages</div>';
+    }
+
+    function renderMessagesAsc(docs, { prepend } = { prepend: false }) {
+      const frag = document.createDocumentFragment();
+      docs.forEach((doc) => {
+        const d = doc.data();
+        const div = document.createElement('div');
+        const from = d.from || 'unknown';
+        const cls = from === 'user' ? 'bubble-user' : 'bubble-bot';
+        div.className = `msg ${cls}`;
+        const ts = d.date && d.date.toDate ? d.date.toDate() : null;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const req = d.request_id ? `<a href="interactions.html?request_id=${encodeURIComponent(d.request_id)}">request:${d.request_id}</a>` : '';
+        meta.innerHTML = `${ts ? ts.toLocaleString() : ''} · from: ${from}${req ? ' · ' + req : ''}`;
+        const body = document.createElement('div');
+        body.textContent = d.contents || '';
+        div.appendChild(meta);
+        div.appendChild(body);
+        frag.appendChild(div);
+      });
+      if (prepend) {
+        const prevHeight = els.messages.scrollHeight;
+        els.messages.insertBefore(frag, els.messages.firstChild);
+        const newHeight = els.messages.scrollHeight;
+        els.messages.scrollTop += (newHeight - prevHeight);
+      } else {
+        els.messages.innerHTML = '';
+        els.messages.appendChild(frag);
+        els.messages.scrollTop = els.messages.scrollHeight;
+      }
+    }
+
+    async function loadInitial() {
+      const userId = els.inpUserId.value.trim();
+      if (!userId) { clearAndRenderEmpty(); return; }
+      paging = { last: null, done: false, pageSize: 25 };
+      const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
+      const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
+      const q = buildQuery(userId, s, e);
+      const snap = await getDocs(q);
+      if (snap.empty) { clearAndRenderEmpty(); return; }
+      const docsDesc = snap.docs;
+      paging.last = docsDesc[docsDesc.length - 1];
+      const docsAsc = docsDesc.slice().reverse();
+      renderMessagesAsc(docsAsc, { prepend: false });
+    }
+
+    async function loadMore() {
+      if (paging.done) return;
+      const userId = els.inpUserId.value.trim();
+      if (!userId) return;
+      const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
+      const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
+      const q = buildQuery(userId, s, e);
+      const snap = await getDocs(q);
+      if (snap.empty) { paging.done = true; return; }
+      const docsDesc = snap.docs;
+      paging.last = docsDesc[docsDesc.length - 1];
+      const docsAsc = docsDesc.slice().reverse();
+      renderMessagesAsc(docsAsc, { prepend: true });
+    }
+
+    els.messages.addEventListener('scroll', () => {
+      if (els.messages.scrollTop < 80) {
+        loadMore();
+      }
+    });
+
+    els.btnApply.addEventListener('click', () => {
+      const u = new URL(location.href);
+      const id = els.inpUserId.value.trim();
+      if (id) u.searchParams.set('user_id', id); else u.searchParams.delete('user_id');
+      history.replaceState(null, '', u.toString());
+      loadInitial();
+    });
+    document.getElementById('btnReload').addEventListener('click', loadInitial);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) await signInAnonymously(auth);
+      await loadInitial();
+    });
+  </script>
+</body>
+</html>
+
+
