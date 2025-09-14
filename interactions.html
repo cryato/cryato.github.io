@@ -32,7 +32,7 @@
     <h1>Interactions</h1>
     <div class="toolbar">
       <button id="btnReload" class="btn">Reload</button>
-      <a class="btn" href="conversations.html">Conversations</a>
+      <a id="lnkConversations" class="btn" href="#">Conversations</a>
     </div>
   </header>
 
@@ -75,6 +75,20 @@
       const p = (k) => u.searchParams.get(k) || '';
       return { apiKey: p('apiKey') || '', authDomain: p('authDomain') || '', projectId: p('projectId') || '' };
     }
+    function buildUrlWithAuth(path, extraParams) {
+      const u = new URL(location.href);
+      const params = new URLSearchParams();
+      ['projectId','apiKey','authDomain'].forEach((k) => {
+        const v = u.searchParams.get(k);
+        if (v) params.set(k, v);
+      });
+      Object.entries(extraParams || {}).forEach(([k, v]) => {
+        if (v != null && String(v).length > 0) params.set(k, String(v));
+      });
+      const qs = params.toString();
+      return qs ? `${path}?${qs}` : path;
+    }
+
 
     const cfg = getConfig();
     const app = initializeApp({ apiKey: cfg.apiKey, authDomain: cfg.authDomain, projectId: cfg.projectId });
@@ -124,8 +138,8 @@
         const trigAt = d.flow_trigger && d.flow_trigger.triggered_at ? new Date(d.flow_trigger.triggered_at) : null;
         const meta = document.createElement('div');
         meta.className = 'meta';
-        const reqLink = `<a href="interactions.html?request_id=${encodeURIComponent(d.request_id)}">${d.request_id}</a>`;
-        const chatLink = `<a href="conversations.html?user_id=${encodeURIComponent(d.chat_id)}">${d.chat_id}</a>`;
+        const reqLink = `<a href="${buildUrlWithAuth('interactions.html', { request_id: d.request_id })}">${d.request_id}</a>`;
+        const chatLink = `<a href="${buildUrlWithAuth('conversations.html', { user_id: d.chat_id })}">${d.chat_id}</a>`;
         meta.innerHTML = `${trigAt ? trigAt.toLocaleString() : ''} · request: ${reqLink} · user: ${chatLink} · flow: ${d.flow_key}`;
 
         div.appendChild(meta);
@@ -245,6 +259,12 @@
       loadInitial();
     });
     document.getElementById('btnReload').addEventListener('click', loadInitial);
+
+    // update header link with auth params
+    (function updateHeaderLinks(){
+      const l = document.getElementById('lnkConversations');
+      if (l) l.href = buildUrlWithAuth('conversations.html', {});
+    })();
 
     onAuthStateChanged(auth, async (user) => {
       if (!user) await signInAnonymously(auth);

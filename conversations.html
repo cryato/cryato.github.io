@@ -32,7 +32,7 @@
     <h1>Conversations</h1>
     <div class="toolbar">
       <button id="btnReload" class="btn">Reload</button>
-      <a class="btn" href="interactions.html">Interactions</a>
+      <a id="lnkInteractions" class="btn" href="#">Interactions</a>
     </div>
   </header>
 
@@ -92,6 +92,27 @@
     };
 
     const url = new URL(location.href);
+    function buildUrlWithAuth(path, extraParams) {
+      const params = new URLSearchParams();
+      // carry auth params
+      const carry = ['projectId', 'apiKey', 'authDomain'];
+      carry.forEach((k) => {
+        const v = url.searchParams.get(k);
+        if (v) params.set(k, v);
+      });
+      // extras
+      Object.entries(extraParams || {}).forEach(([k, v]) => {
+        if (v != null && String(v).length > 0) params.set(k, String(v));
+      });
+      const qs = params.toString();
+      return qs ? `${path}?${qs}` : path;
+    }
+    // update header link with auth params
+    (function updateHeaderLinks(){
+      const l = document.getElementById('lnkInteractions');
+      if (l) l.href = buildUrlWithAuth('interactions.html', {});
+    })();
+
     const initialUserId = url.searchParams.get('user_id') || '';
     if (initialUserId) els.inpUserId.value = initialUserId;
 
@@ -139,7 +160,8 @@
         const ts = d.date && d.date.toDate ? d.date.toDate() : null;
         const meta = document.createElement('div');
         meta.className = 'meta';
-        const req = d.request_id ? `<a href="interactions.html?request_id=${encodeURIComponent(d.request_id)}">request:${d.request_id}</a>` : '';
+        const reqUrl = d.request_id ? buildUrlWithAuth('interactions.html', { request_id: d.request_id }) : null;
+        const req = reqUrl ? `<a href="${reqUrl}">request:${d.request_id}</a>` : '';
         meta.innerHTML = `${ts ? ts.toLocaleString() : ''} · from: ${from}${req ? ' · ' + req : ''}`;
         const body = document.createElement('div');
         body.textContent = d.contents || '';
