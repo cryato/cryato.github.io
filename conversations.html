@@ -66,14 +66,29 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
     import { getFirestore, collection, query, where, orderBy, limit, startAfter, Timestamp, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
-    // Configure via URL params for GitHub Pages hosting without secrets in code
+    // Read cookie helper
+    function getCookie(name) {
+      const n = encodeURIComponent(name) + '=';
+      const parts = document.cookie.split(';');
+      for (let i = 0; i < parts.length; i++) {
+        const c = parts[i].trim();
+        if (c.startsWith(n)) return decodeURIComponent(c.slice(n.length));
+      }
+      return '';
+    }
+    // Configure via URL params first, fallback to cookies
     function getConfigFromHashOrSearch() {
       const u = new URL(location.href);
       const p = (k) => u.searchParams.get(k) || '';
-      return {
+      const fromUrl = {
         apiKey: p('apiKey') || '',
         authDomain: p('authDomain') || '',
-        projectId: p('projectId') || '',
+        projectId: p('projectId') || ''
+      };
+      return {
+        apiKey: fromUrl.apiKey || getCookie('apiKey') || '',
+        authDomain: fromUrl.authDomain || getCookie('authDomain') || '',
+        projectId: fromUrl.projectId || getCookie('projectId') || ''
       };
     }
 
@@ -94,10 +109,9 @@
     const url = new URL(location.href);
     function buildUrlWithAuth(path, extraParams) {
       const params = new URLSearchParams();
-      // carry auth params
-      const carry = ['projectId', 'apiKey', 'authDomain'];
-      carry.forEach((k) => {
-        const v = url.searchParams.get(k);
+      // carry auth params from URL or cookies
+      ['projectId','apiKey','authDomain'].forEach((k) => {
+        const v = url.searchParams.get(k) || getCookie(k);
         if (v) params.set(k, v);
       });
       // extras

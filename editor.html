@@ -49,10 +49,7 @@
   <header>
     <h1>Supportable Flow Editor</h1>
     <div class="toolbar">
-      <button id="btnReload" class="btn">Reload</button>
-      <button id="btnImport" class="btn">Import JSON</button>
-      <button id="btnDownload" class="btn">Save & Download</button>
-      <button id="btnSaveCloud" class="btn accent">Save to Cloud</button>
+      <button id="btnPublish" class="btn accent">Publish</button>
     </div>
   </header>
   <div class="container">
@@ -73,7 +70,7 @@
   <input type="file" id="fileInput" accept="application/json" style="display:none" />
 
   <!-- Cloud Storage config panel (client-only; no secrets stored besides OAuth client ID) -->
-  <div class="panel" style="margin: 16px; padding: 12px;">
+  <div id="gcsPanel" class="panel" style="margin: 16px; padding: 12px;">
     <div class="steps">
       <div class="flow-header">
         <div class="flow-title">Google Cloud Storage</div>
@@ -92,15 +89,13 @@
   const els = {
     flows: document.getElementById('flows'),
     steps: document.getElementById('steps'),
-    btnReload: document.getElementById('btnReload'),
-    btnImport: document.getElementById('btnImport'),
-    btnDownload: document.getElementById('btnDownload'),
-    btnSaveCloud: document.getElementById('btnSaveCloud'),
+    btnPublish: document.getElementById('btnPublish'),
     fileInput: document.getElementById('fileInput'),
     // Cloud panel
     btnAuth: document.getElementById('btnAuth'),
     btnSignOut: document.getElementById('btnSignOut'),
     authStatus: document.getElementById('authStatus'),
+    gcsPanel: document.getElementById('gcsPanel'),
   };
 
   let flowDoc = null; // { flows: { key: def } }
@@ -125,6 +120,9 @@
   function updateAuthStatus() {
     const isAuthed = oauth.accessToken && Date.now() < oauth.tokenExpiresAt;
     els.authStatus.textContent = isAuthed ? 'Signed in' : 'Not signed in';
+    if (els.gcsPanel) {
+      els.gcsPanel.style.display = isAuthed ? 'none' : '';
+    }
   }
 
   function ensureGsiScript() {
@@ -466,6 +464,25 @@
     } catch (_) {}
   }
 
+  // Cookies for Firebase config sharing across pages
+  function setCookie(name, value, days) {
+    try {
+      const d = new Date();
+      d.setTime(d.getTime() + (days*24*60*60*1000));
+      const expires = `expires=${d.toUTCString()}`;
+      document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}; ${expires}; path=/; SameSite=Lax`;
+    } catch (_) {}
+  }
+  function persistFirebaseParamsFromUrl() {
+    const u = new URL(location.href);
+    const projectId = u.searchParams.get('projectId');
+    const apiKey = u.searchParams.get('apiKey');
+    const authDomain = u.searchParams.get('authDomain');
+    if (projectId) setCookie('projectId', projectId, 365);
+    if (apiKey) setCookie('apiKey', apiKey, 365);
+    if (authDomain) setCookie('authDomain', authDomain, 365);
+  }
+
   function handleImportFile(file) {
     const reader = new FileReader();
     reader.onload = () => {
@@ -497,7 +514,7 @@
     if (file) handleImportFile(file);
     e.target.value = '';
   });
-  els.btnSaveCloud.addEventListener('click', saveToCloudWithBackup);
+  els.btnPublish.addEventListener('click', saveToCloudWithBackup);
   els.btnAuth.addEventListener('click', async () => {
     try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
   });
@@ -507,6 +524,8 @@
   loadConfig();
   // Try to restore token and silently refresh if remembered
   tryLoadStoredTokenOrSilentRefresh();
+  // Save Firebase params into cookies for other pages to consume
+  persistFirebaseParamsFromUrl();
   loadFlowJson();
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
