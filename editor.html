@@ -220,10 +220,8 @@
     try {
       // Prefer Cloud if configured and authenticated; fallback to local file
       const { bucket, object } = getCfg();
-      if (bucket && object) {
-        // Use cached token or silent refresh
-        await tryLoadStoredTokenOrSilentRefresh();
-        const token = await getAccessToken(false);
+      if (bucket && object && hasValidToken()) {
+        const token = oauth.accessToken;
         const url = gcsDownloadUrl(bucket, object);
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
         if (!res.ok) throw new Error('Failed to fetch from Cloud Storage');
@@ -414,9 +412,9 @@
     if (!flowDoc) return alert('Nothing to save.');
     const { bucket, object } = getCfg();
     if (!bucket || !object) return alert('Please configure Bucket and Object path.');
+    if (!hasValidToken()) { alert('Please sign in first.'); return; }
     try {
-      await tryLoadStoredTokenOrSilentRefresh();
-      const token = await getAccessToken(false);
+      const token = oauth.accessToken;
       // 1) Try to read current object; if present, back it up
       let currentText = null;
       try {
@@ -447,21 +445,20 @@
     }
   }
 
-  async function tryLoadStoredTokenOrSilentRefresh() {
+  function loadStoredTokenOnly() {
     try {
       const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
-      const { accessToken, tokenExpiresAt, rememberUntil } = stored;
+      const { accessToken, tokenExpiresAt } = stored;
       if (accessToken && Number.isFinite(tokenExpiresAt)) {
         oauth.accessToken = accessToken;
         oauth.tokenExpiresAt = tokenExpiresAt;
       }
-      const now = Date.now();
-      const stillValid = oauth.accessToken && now < oauth.tokenExpiresAt - 5000;
-      if (stillValid) { updateAuthStatus(); return; }
-      if (Number.isFinite(rememberUntil) && now < rememberUntil) {
-        try { await getAccessToken(false); } catch (_) {}
-      }
     } catch (_) {}
+    updateAuthStatus();
+  }
+
+  function hasValidToken() {
+    return !!(oauth.accessToken && Date.now() < oauth.tokenExpiresAt - 5000);
   }
 
   function handleImportFile(file) {
@@ -497,8 +494,8 @@
 
   // Init
   loadConfig();
-  // Try to restore token and silently refresh if remembered
-  tryLoadStoredTokenOrSilentRefresh();
+  // Only load stored token; do not auto sign-in or refresh
+  loadStoredTokenOnly();
   loadFlowJson();
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
