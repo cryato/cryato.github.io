@@ -162,6 +162,8 @@
                   rememberUntil
                 }));
                 updateAuthStatus();
+                // Set Firebase cookies from firebase_config.json in the bucket for other pages
+                ensureFirebaseCookiesFromBucket().catch(() => {});
                 // After successful sign-in, clean URL if it has params
                 if (force && window.location.search && window.location.search.length > 1) {
                   const clean = window.location.origin + window.location.pathname;
@@ -214,6 +216,31 @@
     const pad = (n) => String(n).padStart(2, '0');
     const name = `flow${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}_${pad(now.getMinutes())}.json`;
     return name;
+  }
+
+  function setCookie(name, value, days) {
+    try {
+      const d = new Date();
+      d.setTime(d.getTime() + (days*24*60*60*1000));
+      const expires = `expires=${d.toUTCString()}`;
+      document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}; ${expires}; path=/; SameSite=Lax`;
+    } catch (_) {}
+  }
+
+  async function ensureFirebaseCookiesFromBucket() {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket || !hasValidToken()) return;
+      const url = gcsDownloadUrl(bucket, 'firebase_config.json');
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json && typeof json === 'object') {
+        if (json.projectId) setCookie('projectId', json.projectId, 365);
+        if (json.apiKey) setCookie('apiKey', json.apiKey, 365);
+        if (json.authDomain) setCookie('authDomain', json.authDomain, 365);
+      }
+    } catch (_) {}
   }
 
   async function loadFlowJson() {
@@ -496,6 +523,8 @@
   loadConfig();
   // Only load stored token; do not auto sign-in or refresh
   loadStoredTokenOnly();
+  // If token already present, set Firebase cookies from bucket for other pages
+  if (hasValidToken()) { ensureFirebaseCookiesFromBucket().catch(() => {}); }
   loadFlowJson();
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
