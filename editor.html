@@ -49,6 +49,9 @@
   <header>
     <h1>Supportable Flow Editor</h1>
     <div class="toolbar">
+      <a id="lnkConversations" class="btn" href="conversations">Conversations</a>
+      <a id="lnkInteractions" class="btn" href="interactions">Interactions</a>
+      <button id="btnSignOutHeader" class="btn">Sign out</button>
       <button id="btnPublish" class="btn accent">Publish</button>
     </div>
   </header>
@@ -90,6 +93,7 @@
     flows: document.getElementById('flows'),
     steps: document.getElementById('steps'),
     btnPublish: document.getElementById('btnPublish'),
+    btnSignOutHeader: document.getElementById('btnSignOutHeader'),
     fileInput: document.getElementById('fileInput'),
     // Cloud panel
     btnAuth: document.getElementById('btnAuth'),
@@ -186,6 +190,11 @@
   }
 
   function signOut() {
+    // Double confirm before actually signing out
+    const first = confirm('Are you sure you want to sign out?');
+    if (!first) return;
+    const second = confirm('Really sign out? You will need to sign in again to Publish.');
+    if (!second) return;
     oauth.accessToken = '';
     oauth.tokenExpiresAt = 0;
     try { localStorage.removeItem('gcs_token'); } catch (_) {}
@@ -518,6 +527,7 @@
     try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
   });
   els.btnSignOut.addEventListener('click', signOut);
+  if (els.btnSignOutHeader) els.btnSignOutHeader.addEventListener('click', signOut);
 
   // Init
   loadConfig();
