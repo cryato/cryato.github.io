@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Text Editor</title>
+  <style>
+    :root { --bg: #0f172a; --panel: #111827; --muted: #94a3b8; --text: #e5e7eb; --primary: #22d3ee; --accent: #8b5cf6; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: linear-gradient(180deg, #0b1022 0%, #0f172a 100%); color: var(--text); }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #1f2937; backdrop-filter: blur(8px); position: sticky; top: 0; background: rgba(17,24,39,0.6); z-index: 10; }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.3px; }
+    .container { display: grid; grid-template-columns: 280px 1fr; gap: 16px; padding: 16px; align-items: start; }
+    .panel { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03); }
+    .flows { padding: 8px; }
+    .flow-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin: 8px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; color: #cbd5e1; }
+    .flow-item:hover { background: rgba(148,163,184,0.08); border-color: rgba(148,163,184,0.15); }
+    .flow-item.active { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.35); color: #e9d5ff; }
+    .flow-key { font-weight: 600; font-size: 13px; }
+    .flow-trigger { font-size: 12px; color: var(--muted); }
+
+    .steps { padding: 16px; }
+    .flow-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 8px 4px; }
+    .flow-title { font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }
+    .flow-desc { color: var(--muted); font-size: 13px; }
+
+    .step { padding: 14px; margin: 12px 0; border-radius: 12px; border: 1px solid #1f2937; background: rgba(2,6,23,0.55); }
+    .step-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid #1f2937; background: rgba(15,23,42,0.6); color: #b3e1ff; }
+
+    .field { display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: start; margin: 10px 0; }
+    .label { color: var(--muted); font-size: 12px; padding-top: 7px; }
+    input[type="text"], textarea { width: 100%; box-sizing: border-box; background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 10px 12px; border-radius: 10px; outline: none; font-size: 13px; }
+    textarea { min-height: 60px; resize: vertical; }
+
+    .toolbar { display: flex; gap: 8px; }
+    .btn { appearance: none; border: 1px solid #283449; background: linear-gradient(180deg, #0b1224 0%, #0a1222 100%); color: #e5e7eb; border-radius: 10px; padding: 10px 14px; font-size: 13px; cursor: pointer; box-shadow: 0 6px 16px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04); transition: transform 120ms ease, border-color 120ms ease, background 120ms ease; }
+    .btn:hover { transform: translateY(-1px); border-color: #334155; }
+    .btn.primary { border-color: rgba(34,211,238,0.6); background: linear-gradient(180deg, rgba(34,211,238,0.18) 0%, rgba(34,211,238,0.10) 100%); color: #cffafe; }
+    .btn.accent { border-color: rgba(139,92,246,0.6); background: linear-gradient(180deg, rgba(139,92,246,0.18) 0%, rgba(139,92,246,0.10) 100%); color: #ede9fe; }
+
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+    .footer { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1f2937; }
+    .hint { color: var(--muted); font-size: 12px; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background: rgba(2,6,23,0.6); border: 1px solid #1f2937; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Supportable Flow Editor</h1>
+    <div class="toolbar">
+      <button id="btnReload" class="btn">Reload</button>
+      <button id="btnImport" class="btn">Import JSON</button>
+      <button id="btnDownload" class="btn">Save & Download</button>
+      <button id="btnSaveCloud" class="btn accent">Save to Cloud</button>
+    </div>
+  </header>
+  <div class="container">
+    <div class="panel">
+      <div class="flows" id="flows"></div>
+    </div>
+    <div class="panel">
+      <div class="steps" id="steps">
+        <div class="empty">Select a flow to edit ask/say texts.</div>
+      </div>
+      <div class="footer">
+        <div class="hint">Variables must be written as <span class="code">{{variable}}</span>.</div>
+        <div class="hint">Only <span class="code">ask</span> and <span class="code">say</span> are editable.</div>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept="application/json" style="display:none" />
+
+  <!-- Cloud Storage config panel (client-only; no secrets stored besides OAuth client ID) -->
+  <div class="panel" style="margin: 16px; padding: 12px;">
+    <div class="steps">
+      <div class="flow-header">
+        <div class="flow-title">Google Cloud Storage</div>
+        <div class="toolbar">
+          <button id="btnAuth" class="btn">Sign in</button>
+          <button id="btnSignOut" class="btn">Sign out</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="label">OAuth Client ID</div>
+        <input type="text" id="cfgClientId" placeholder="xxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com" />
+      </div>
+      <div class="field">
+        <div class="label">Bucket</div>
+        <input type="text" id="cfgBucket" placeholder="my-bucket-name" />
+      </div>
+      <div class="field">
+        <div class="label">Object path</div>
+        <input type="text" id="cfgObject" placeholder="flow.json" />
+      </div>
+      <div class="toolbar" style="margin-top: 8px;">
+        <button id="btnSaveCfg" class="btn">Save Config</button>
+        <button id="btnLoadCloud" class="btn primary">Load from Cloud</button>
+      </div>
+      <div class="hint" id="authStatus" style="margin-top:8px;">Not signed in</div>
+    </div>
+  </div>
+
+  <script>
+  // Google Identity Services
+  // Loaded via script tag injected below. Uses OAuth 2.0 token model for GCS JSON API.
+  const els = {
+    flows: document.getElementById('flows'),
+    steps: document.getElementById('steps'),
+    btnReload: document.getElementById('btnReload'),
+    btnImport: document.getElementById('btnImport'),
+    btnDownload: document.getElementById('btnDownload'),
+    btnSaveCloud: document.getElementById('btnSaveCloud'),
+    fileInput: document.getElementById('fileInput'),
+    // Cloud panel
+    btnAuth: document.getElementById('btnAuth'),
+    btnSignOut: document.getElementById('btnSignOut'),
+    cfgClientId: document.getElementById('cfgClientId'),
+    cfgBucket: document.getElementById('cfgBucket'),
+    cfgObject: document.getElementById('cfgObject'),
+    btnSaveCfg: document.getElementById('btnSaveCfg'),
+    btnLoadCloud: document.getElementById('btnLoadCloud'),
+    authStatus: document.getElementById('authStatus'),
+  };
+
+  let flowDoc = null; // { flows: { key: def } }
+  let currentFlowKey = null;
+  let oauth = { clientId: '', accessToken: '', tokenExpiresAt: 0, scope: 'https://www.googleapis.com/auth/devstorage.read_write', tokenClient: null };
+  let gsiLoaded = false;
+
+  // Load config from localStorage or URL params
+  function loadConfig() {
+    const url = new URL(window.location.href);
+    const params = Object.fromEntries(url.searchParams.entries());
+    const stored = JSON.parse(localStorage.getItem('gcs_config') || '{}');
+    const clientId = params.client_id || stored.clientId || '';
+    const bucket = params.bucket || stored.bucket || '';
+    const object = params.object || stored.object || 'flow.json';
+    oauth.clientId = clientId;
+    els.cfgClientId.value = clientId;
+    els.cfgBucket.value = bucket;
+    els.cfgObject.value = object;
+    updateAuthStatus();
+  }
+
+  function saveConfig() {
+    const cfg = {
+      clientId: (els.cfgClientId.value || '').trim(),
+      bucket: (els.cfgBucket.value || '').trim(),
+      object: (els.cfgObject.value || '').trim() || 'flow.json'
+    };
+    localStorage.setItem('gcs_config', JSON.stringify(cfg));
+    oauth.clientId = cfg.clientId;
+    alert('Saved.');
+  }
+
+  function updateAuthStatus() {
+    const isAuthed = oauth.accessToken && Date.now() < oauth.tokenExpiresAt;
+    els.authStatus.textContent = isAuthed ? 'Signed in' : 'Not signed in';
+  }
+
+  function ensureGsiScript() {
+    return new Promise((resolve) => {
+      if (gsiLoaded) return resolve();
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true; s.defer = true;
+      s.onload = () => { gsiLoaded = true; resolve(); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function getAccessToken(force = false) {
+    if (!oauth.clientId) throw new Error('Missing OAuth Client ID');
+    const stillValid = oauth.accessToken && Date.now() < oauth.tokenExpiresAt - 5000;
+    if (stillValid && !force) return oauth.accessToken;
+    await ensureGsiScript();
+    return new Promise((resolve, reject) => {
+      try {
+        if (!oauth.tokenClient) {
+          oauth.tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: oauth.clientId,
+            scope: oauth.scope,
+            callback: (resp) => {
+              if (resp && resp.access_token) {
+                oauth.accessToken = resp.access_token;
+                // expires_in seconds
+                const expires = Number(resp.expires_in || 0);
+                oauth.tokenExpiresAt = Date.now() + Math.max(0, expires - 10) * 1000;
+                updateAuthStatus();
+                resolve(oauth.accessToken);
+              } else {
+                reject(new Error('No access token'));
+              }
+            }
+          });
+        }
+        oauth.tokenClient.requestAccessToken({ prompt: 'consent' });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function signOut() {
+    oauth.accessToken = '';
+    oauth.tokenExpiresAt = 0;
+    updateAuthStatus();
+  }
+
+  function getCfg() {
+    return {
+      bucket: (els.cfgBucket.value || '').trim(),
+      object: (els.cfgObject.value || '').trim() || 'flow.json'
+    };
+  }
+
+  function gcsDownloadUrl(bucket, objectPath) {
+    return `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}?alt=media`;
+  }
+
+  function gcsUploadUrl(bucket, objectPath) {
+    return `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
+  }
+
+  function formatBackupName() {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const name = `flow${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}_${pad(now.getMinutes())}.json`;
+    return name;
+  }
+
+  async function loadFlowJson() {
+    try {
+      // Prefer Cloud if configured and authenticated; fallback to local file
+      const { bucket, object } = getCfg();
+      if (bucket && object) {
+        const token = await getAccessToken(false);
+        const url = gcsDownloadUrl(bucket, object);
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to fetch from Cloud Storage');
+        const json = await res.json();
+        flowDoc = json;
+        currentFlowKey = null;
+        renderFlows();
+        renderSteps();
+        return;
+      }
+      const res = await fetch('flow.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to fetch flow.json');
+      const json = await res.json();
+      flowDoc = json;
+      currentFlowKey = null;
+      renderFlows();
+      renderSteps();
+    } catch (err) {
+      console.error(err);
+      alert('Could not load flow.json. Use Import JSON to load manually.');
+      flowDoc = { flows: {} };
+      renderFlows();
+      renderSteps();
+    }
+  }
+
+  function renderFlows() {
+    const flows = (flowDoc && flowDoc.flows) || {};
+    const keys = Object.keys(flows);
+    els.flows.innerHTML = '';
+
+    if (keys.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'No flows found.';
+      els.flows.appendChild(empty);
+      return;
+    }
+
+    keys.forEach((key) => {
+      const def = flows[key] || {};
+      const item = document.createElement('div');
+      item.className = 'flow-item' + (currentFlowKey === key ? ' active' : '');
+      item.addEventListener('click', () => {
+        currentFlowKey = key;
+        renderFlows();
+        renderSteps();
+      });
+
+      const icon = document.createElement('div');
+      icon.innerHTML = '⚡️';
+
+      const meta = document.createElement('div');
+      const k = document.createElement('div');
+      k.className = 'flow-key';
+      k.textContent = key;
+      const t = document.createElement('div');
+      t.className = 'flow-trigger';
+      t.textContent = (def && def.trigger) ? def.trigger : '';
+      meta.appendChild(k);
+      meta.appendChild(t);
+
+      item.appendChild(icon);
+      item.appendChild(meta);
+      els.flows.appendChild(item);
+    });
+  }
+
+  function renderSteps() {
+    els.steps.innerHTML = '';
+    const flows = (flowDoc && flowDoc.flows) || {};
+    const def = flows[currentFlowKey];
+
+    if (!def) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Select a flow to edit ask/say texts.';
+      els.steps.appendChild(empty);
+      return;
+    }
+
+    // Header
+    const head = document.createElement('div');
+    head.className = 'flow-header';
+    const title = document.createElement('div');
+    title.className = 'flow-title';
+    title.textContent = currentFlowKey + (def.trigger ? '  ·  ' + def.trigger : '');
+    const desc = document.createElement('div');
+    desc.className = 'flow-desc';
+    desc.textContent = def.description || '';
+    head.appendChild(title);
+    head.appendChild(desc);
+    els.steps.appendChild(head);
+
+    const steps = Array.isArray(def.steps) ? def.steps : [];
+    steps.forEach((step, idx) => {
+      const s = document.createElement('div');
+      s.className = 'step';
+
+      const head = document.createElement('div');
+      head.className = 'step-head';
+      const left = document.createElement('div');
+      const type = step.ask ? 'ask' : (step.say ? 'say' : (step.wait ? 'wait' : (step.script ? 'script' : 'step')));
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = type.toUpperCase();
+      left.appendChild(badge);
+      const right = document.createElement('div');
+      right.textContent = '#' + (idx + 1);
+      right.style.color = '#94a3b8';
+      right.style.fontSize = '12px';
+      s.appendChild(head);
+      head.appendChild(left);
+      head.appendChild(right);
+
+      // Editable fields for ask/say only
+      if (step.ask != null || step.say != null) {
+        if (step.ask != null) {
+          const field = fieldText('ask', step.ask, (v) => { step.ask = v; });
+          s.appendChild(field);
+        }
+        if (step.saveAs != null) {
+          const field = fieldText('saveAs', step.saveAs, (v) => { step.saveAs = v; }, true);
+          s.appendChild(field);
+        }
+        if (step.say != null) {
+          const field = fieldText('say', step.say, (v) => { step.say = v; });
+          s.appendChild(field);
+        }
+      } else {
+        const readOnly = document.createElement('div');
+        readOnly.className = 'field';
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = 'Details';
+        const val = document.createElement('div');
+        val.textContent = JSON.stringify(step, null, 2);
+        readOnly.appendChild(label);
+        readOnly.appendChild(val);
+        s.appendChild(readOnly);
+      }
+
+      els.steps.appendChild(s);
+    });
+  }
+
+  function fieldText(labelText, value, onInput, singleLine = false) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = labelText;
+
+    let input;
+    if (singleLine) {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.value = value == null ? '' : String(value);
+    } else {
+      input = document.createElement('textarea');
+      input.value = value == null ? '' : String(value);
+    }
+
+    input.addEventListener('input', (e) => onInput(e.target.value));
+
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function downloadJson(obj, filename) {
+    const json = JSON.stringify(obj, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 0);
+  }
+
+  async function saveToCloudWithBackup() {
+    if (!flowDoc) return alert('Nothing to save.');
+    const { bucket, object } = getCfg();
+    if (!bucket || !object) return alert('Please configure Bucket and Object path.');
+    try {
+      const token = await getAccessToken(false);
+      // 1) Try to read current object; if present, back it up
+      let currentText = null;
+      try {
+        const getRes = await fetch(gcsDownloadUrl(bucket, object), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (getRes.ok) currentText = await getRes.text();
+      } catch (_) {}
+      if (currentText != null) {
+        const backupName = formatBackupName();
+        const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: currentText
+        });
+        if (!upBackup.ok) console.warn('Backup upload failed');
+      }
+      // 2) Upload new content
+      const newBody = JSON.stringify(flowDoc, null, 2);
+      const upMain = await fetch(gcsUploadUrl(bucket, object), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: newBody
+      });
+      if (!upMain.ok) throw new Error('Upload failed');
+      alert('Saved to Cloud.');
+    } catch (e) {
+      console.error(e);
+      alert('Save failed: ' + e.message);
+    }
+  }
+
+  function handleImportFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data || typeof data !== 'object' || !data.flows) {
+          throw new Error('Invalid structure: expected root object with "flows"');
+        }
+        flowDoc = data;
+        currentFlowKey = null;
+        renderFlows();
+        renderSteps();
+      } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // Events
+  els.btnReload.addEventListener('click', loadFlowJson);
+  els.btnDownload.addEventListener('click', () => {
+    if (!flowDoc) return;
+    downloadJson(flowDoc, 'flow.json');
+  });
+  els.btnImport.addEventListener('click', () => els.fileInput.click());
+  els.fileInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) handleImportFile(file);
+    e.target.value = '';
+  });
+  els.btnSaveCloud.addEventListener('click', saveToCloudWithBackup);
+  els.btnSaveCfg.addEventListener('click', saveConfig);
+  els.btnLoadCloud.addEventListener('click', loadFlowJson);
+  els.btnAuth.addEventListener('click', async () => {
+    try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
+  });
+  els.btnSignOut.addEventListener('click', signOut);
+
+  // Init
+  loadConfig();
+  loadFlowJson();
+  </script>
+  <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
