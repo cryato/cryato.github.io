@@ -54,7 +54,7 @@
         <div></div>
         <button id="btnApply" class="btn">Apply</button>
       </div>
-      <div style="margin-top:12px; color: var(--muted); font-size: 12px;">URL: conversations.html?user_id=123</div>
+      <div style="margin-top:12px; color: var(--muted); font-size: 12px;"></div>
     </div>
     <div class="panel">
       <div id="messages" class="messages"></div>
@@ -109,7 +109,7 @@
     // update header link with auth params
     (function updateHeaderLinks(){
       const l = document.getElementById('lnkInteractions');
-      if (l) l.href = buildUrlWithAuth('interactions.html', {});
+      if (l) l.href = buildUrlWithAuth('interactions', {});
     })();
 
     const initialUserId = url.searchParams.get('user_id') || '';
@@ -159,7 +159,7 @@
         const ts = d.date && d.date.toDate ? d.date.toDate() : null;
         const meta = document.createElement('div');
         meta.className = 'meta';
-        const reqUrl = d.request_id ? buildUrlWithAuth('interactions.html', { request_id: d.request_id }) : null;
+        const reqUrl = d.request_id ? buildUrlWithAuth('interactions', { request_id: d.request_id }) : null;
         const req = reqUrl ? `<a href="${reqUrl}">request:${d.request_id}</a>` : '';
         meta.innerHTML = `${ts ? ts.toLocaleString() : ''} · from: ${from}${req ? ' · ' + req : ''}`;
         const body = document.createElement('div');

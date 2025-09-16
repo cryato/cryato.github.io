@@ -58,7 +58,7 @@
         <div></div>
         <button id="btnApply" class="btn">Apply</button>
       </div>
-      <div style="margin-top:12px; color: var(--muted); font-size: 12px;">URL: interactions.html?request_id=abc&start=2024-01-01&end=2024-01-31</div>
+      <div style="margin-top:12px; color: var(--muted); font-size: 12px;"></div>
     </div>
     <div class="panel">
       <div id="list" class="list"></div>
@@ -142,8 +142,8 @@
         const trigAt = d.flow_trigger && d.flow_trigger.triggered_at ? new Date(d.flow_trigger.triggered_at) : null;
         const meta = document.createElement('div');
         meta.className = 'meta';
-        const reqLink = `<a href="${buildUrlWithAuth('interactions.html', { request_id: d.request_id })}">${d.request_id}</a>`;
-        const chatLink = `<a href="${buildUrlWithAuth('conversations.html', { user_id: d.chat_id })}">${d.chat_id}</a>`;
+        const reqLink = `<a href="${buildUrlWithAuth('interactions', { request_id: d.request_id })}">${d.request_id}</a>`;
+        const chatLink = `<a href="${buildUrlWithAuth('conversations', { user_id: d.chat_id })}">${d.chat_id}</a>`;
         meta.innerHTML = `${trigAt ? trigAt.toLocaleString() : ''} · request: ${reqLink} · user: ${chatLink} · flow: ${d.flow_key}`;
 
         div.appendChild(meta);
@@ -267,7 +267,7 @@
     // update header link with auth params
     (function updateHeaderLinks(){
       const l = document.getElementById('lnkConversations');
-      if (l) l.href = buildUrlWithAuth('conversations.html', {});
+      if (l) l.href = buildUrlWithAuth('conversations', {});
     })();
 
     onAuthStateChanged(auth, async (user) => {
