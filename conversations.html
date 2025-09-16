@@ -66,29 +66,19 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
     import { getFirestore, collection, query, where, orderBy, limit, startAfter, Timestamp, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
-    // Read cookie helper
-    function getCookie(name) {
-      const n = encodeURIComponent(name) + '=';
-      const parts = document.cookie.split(';');
-      for (let i = 0; i < parts.length; i++) {
-        const c = parts[i].trim();
-        if (c.startsWith(n)) return decodeURIComponent(c.slice(n.length));
-      }
-      return '';
+    // Configure via URL params for GitHub Pages hosting without secrets in code
+    function readCookie(name) {
+      const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : '';
     }
-    // Configure via URL params first, fallback to cookies
     function getConfigFromHashOrSearch() {
       const u = new URL(location.href);
       const p = (k) => u.searchParams.get(k) || '';
-      const fromUrl = {
-        apiKey: p('apiKey') || '',
-        authDomain: p('authDomain') || '',
-        projectId: p('projectId') || ''
-      };
+      // Fallback to cookies when URL params are absent
       return {
-        apiKey: fromUrl.apiKey || getCookie('apiKey') || '',
-        authDomain: fromUrl.authDomain || getCookie('authDomain') || '',
-        projectId: fromUrl.projectId || getCookie('projectId') || ''
+        apiKey: p('apiKey') || readCookie('apiKey') || '',
+        authDomain: p('authDomain') || readCookie('authDomain') || '',
+        projectId: p('projectId') || readCookie('projectId') || '',
       };
     }
 
@@ -109,12 +99,7 @@
     const url = new URL(location.href);
     function buildUrlWithAuth(path, extraParams) {
       const params = new URLSearchParams();
-      // carry auth params from URL or cookies
-      ['projectId','apiKey','authDomain'].forEach((k) => {
-        const v = url.searchParams.get(k) || getCookie(k);
-        if (v) params.set(k, v);
-      });
-      // extras
+      // Only include context-specific extras; do NOT carry auth params anymore
       Object.entries(extraParams || {}).forEach(([k, v]) => {
         if (v != null && String(v).length > 0) params.set(k, String(v));
       });
