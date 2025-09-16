@@ -190,11 +190,8 @@
   }
 
   function signOut() {
-    // Double confirm before actually signing out
-    const first = confirm('Are you sure you want to sign out?');
-    if (!first) return;
-    const second = confirm('Really sign out? You will need to sign in again to Publish.');
-    if (!second) return;
+    const sure = confirm('Sign out? You will need to sign in again to Publish.');
+    if (!sure) return;
     oauth.accessToken = '';
     oauth.tokenExpiresAt = 0;
     try { localStorage.removeItem('gcs_token'); } catch (_) {}
