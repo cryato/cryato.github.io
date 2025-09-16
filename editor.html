@@ -82,22 +82,6 @@
           <button id="btnSignOut" class="btn">Sign out</button>
         </div>
       </div>
-      <div class="field">
-        <div class="label">OAuth Client ID</div>
-        <input type="text" id="cfgClientId" placeholder="xxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com" />
-      </div>
-      <div class="field">
-        <div class="label">Bucket</div>
-        <input type="text" id="cfgBucket" placeholder="my-bucket-name" />
-      </div>
-      <div class="field">
-        <div class="label">Object path</div>
-        <input type="text" id="cfgObject" placeholder="flow.json" />
-      </div>
-      <div class="toolbar" style="margin-top: 8px;">
-        <button id="btnSaveCfg" class="btn">Save Config</button>
-        <button id="btnLoadCloud" class="btn primary">Load from Cloud</button>
-      </div>
       <div class="hint" id="authStatus" style="margin-top:8px;">Not signed in</div>
     </div>
   </div>
@@ -116,11 +100,6 @@
     // Cloud panel
     btnAuth: document.getElementById('btnAuth'),
     btnSignOut: document.getElementById('btnSignOut'),
-    cfgClientId: document.getElementById('cfgClientId'),
-    cfgBucket: document.getElementById('cfgBucket'),
-    cfgObject: document.getElementById('cfgObject'),
-    btnSaveCfg: document.getElementById('btnSaveCfg'),
-    btnLoadCloud: document.getElementById('btnLoadCloud'),
     authStatus: document.getElementById('authStatus'),
   };
 
@@ -129,30 +108,18 @@
   let oauth = { clientId: '', accessToken: '', tokenExpiresAt: 0, scope: 'https://www.googleapis.com/auth/devstorage.read_write', tokenClient: null };
   let gsiLoaded = false;
 
-  // Load config from localStorage or URL params
+  // Load config from localStorage or URL params (client_id, bucket). Object defaults to flow.json.
   function loadConfig() {
     const url = new URL(window.location.href);
     const params = Object.fromEntries(url.searchParams.entries());
     const stored = JSON.parse(localStorage.getItem('gcs_config') || '{}');
     const clientId = params.client_id || stored.clientId || '';
     const bucket = params.bucket || stored.bucket || '';
-    const object = params.object || stored.object || 'flow.json';
+    const object = 'flow.json';
     oauth.clientId = clientId;
-    els.cfgClientId.value = clientId;
-    els.cfgBucket.value = bucket;
-    els.cfgObject.value = object;
+    // Persist silently so future loads work without showing fields
+    localStorage.setItem('gcs_config', JSON.stringify({ clientId, bucket, object }));
     updateAuthStatus();
-  }
-
-  function saveConfig() {
-    const cfg = {
-      clientId: (els.cfgClientId.value || '').trim(),
-      bucket: (els.cfgBucket.value || '').trim(),
-      object: (els.cfgObject.value || '').trim() || 'flow.json'
-    };
-    localStorage.setItem('gcs_config', JSON.stringify(cfg));
-    oauth.clientId = cfg.clientId;
-    alert('Saved.');
   }
 
   function updateAuthStatus() {
@@ -188,7 +155,22 @@
                 // expires_in seconds
                 const expires = Number(resp.expires_in || 0);
                 oauth.tokenExpiresAt = Date.now() + Math.max(0, expires - 10) * 1000;
+                // Remember window: 1 year
+                const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+                const rememberUntil = Date.now() + oneYearMs;
+                localStorage.setItem('gcs_token', JSON.stringify({
+                  accessToken: oauth.accessToken,
+                  tokenExpiresAt: oauth.tokenExpiresAt,
+                  rememberUntil
+                }));
                 updateAuthStatus();
+                // After successful sign-in, clean URL if it has params
+                if (force && window.location.search && window.location.search.length > 1) {
+                  const clean = window.location.origin + window.location.pathname;
+                  // Use replace to avoid back button pollution
+                  window.location.replace(clean);
+                  return; // stop further execution; reload will happen
+                }
                 resolve(oauth.accessToken);
               } else {
                 reject(new Error('No access token'));
@@ -196,7 +178,7 @@
             }
           });
         }
-        oauth.tokenClient.requestAccessToken({ prompt: 'consent' });
+        oauth.tokenClient.requestAccessToken({ prompt: force ? 'consent' : 'none' });
       } catch (e) {
         reject(e);
       }
@@ -206,14 +188,19 @@
   function signOut() {
     oauth.accessToken = '';
     oauth.tokenExpiresAt = 0;
+    try { localStorage.removeItem('gcs_token'); } catch (_) {}
     updateAuthStatus();
   }
 
   function getCfg() {
-    return {
-      bucket: (els.cfgBucket.value || '').trim(),
-      object: (els.cfgObject.value || '').trim() || 'flow.json'
-    };
+    try {
+      const stored = JSON.parse(localStorage.getItem('gcs_config') || '{}');
+      const bucket = (stored.bucket || '').trim();
+      const object = 'flow.json';
+      return { bucket, object };
+    } catch (_) {
+      return { bucket: '', object: 'flow.json' };
+    }
   }
 
   function gcsDownloadUrl(bucket, objectPath) {
@@ -236,6 +223,8 @@
       // Prefer Cloud if configured and authenticated; fallback to local file
       const { bucket, object } = getCfg();
       if (bucket && object) {
+        // Use cached token or silent refresh
+        await tryLoadStoredTokenOrSilentRefresh();
         const token = await getAccessToken(false);
         const url = gcsDownloadUrl(bucket, object);
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
@@ -428,6 +417,7 @@
     const { bucket, object } = getCfg();
     if (!bucket || !object) return alert('Please configure Bucket and Object path.');
     try {
+      await tryLoadStoredTokenOrSilentRefresh();
       const token = await getAccessToken(false);
       // 1) Try to read current object; if present, back it up
       let currentText = null;
@@ -457,6 +447,23 @@
       console.error(e);
       alert('Save failed: ' + e.message);
     }
+  }
+
+  async function tryLoadStoredTokenOrSilentRefresh() {
+    try {
+      const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
+      const { accessToken, tokenExpiresAt, rememberUntil } = stored;
+      if (accessToken && Number.isFinite(tokenExpiresAt)) {
+        oauth.accessToken = accessToken;
+        oauth.tokenExpiresAt = tokenExpiresAt;
+      }
+      const now = Date.now();
+      const stillValid = oauth.accessToken && now < oauth.tokenExpiresAt - 5000;
+      if (stillValid) { updateAuthStatus(); return; }
+      if (Number.isFinite(rememberUntil) && now < rememberUntil) {
+        try { await getAccessToken(false); } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   function handleImportFile(file) {
@@ -491,8 +498,6 @@
     e.target.value = '';
   });
   els.btnSaveCloud.addEventListener('click', saveToCloudWithBackup);
-  els.btnSaveCfg.addEventListener('click', saveConfig);
-  els.btnLoadCloud.addEventListener('click', loadFlowJson);
   els.btnAuth.addEventListener('click', async () => {
     try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
   });
@@ -500,6 +505,8 @@
 
   // Init
   loadConfig();
+  // Try to restore token and silently refresh if remembered
+  tryLoadStoredTokenOrSilentRefresh();
   loadFlowJson();
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
