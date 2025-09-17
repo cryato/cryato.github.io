@@ -109,8 +109,9 @@
       list: document.getElementById('list')
     };
 
-    // Cache conversation messages to avoid duplicate fetches
-    const conversationsCache = new Map();
+    // Caches
+    const conversationsCache = new Map(); // key: chatId_messageId -> Promise(data|null)
+    const requestMessagesCache = new Map(); // key: requestId -> Promise<Map(message_id -> data)>
 
     function formatTimeHM(input) {
       if (!input) return '';
@@ -135,6 +136,28 @@
         }
       })();
       conversationsCache.set(key, p);
+      return p;
+    }
+
+    async function fetchMessagesForRequestMap(chatId, requestId) {
+      if (!requestId) return new Map();
+      if (requestMessagesCache.has(requestId)) return requestMessagesCache.get(requestId);
+      const p = (async () => {
+        try {
+          const colRef = collection(db, 'conversations');
+          const q = query(colRef, where('request_id', '==', requestId), where('chat_id', '==', coerce(chatId)));
+          const snap = await getDocs(q);
+          const map = new Map();
+          snap.forEach((doc) => {
+            const d = doc.data();
+            if (d && d.message_id != null) map.set(String(d.message_id), d);
+          });
+          return map;
+        } catch (_) {
+          return new Map();
+        }
+      })();
+      requestMessagesCache.set(requestId, p);
       return p;
     }
 
@@ -177,12 +200,19 @@
 
         div.appendChild(meta);
 
-        // steps
-        const steps = Array.isArray(d.steps) ? d.steps : [];
-        if (steps.length > 0) {
-          const stepsWrap = document.createElement('div');
-          stepsWrap.className = 'steps';
-          steps.forEach((s) => {
+        // expandable details (lazy-loaded)
+        const details = document.createElement('div');
+        details.className = 'steps';
+        details.style.display = 'none';
+        div.appendChild(details);
+
+        function buildDetailsOnce() {
+          if (details.dataset.loaded === '1') return;
+          details.dataset.loaded = '1';
+          const steps = Array.isArray(d.steps) ? d.steps : [];
+          if (steps.length === 0) return;
+          // placeholder lines first
+          const lines = steps.map((s) => {
             const line = document.createElement('div');
             line.className = 'step';
             if (s.type === 'message') {
@@ -190,14 +220,8 @@
               const time = formatTimeHM(when);
               const fromLabel = s.from === 'user' ? 'User' : 'Bot';
               line.textContent = `${time} ${fromLabel}: …`;
-              // Enrich with message contents from conversations
-              fetchConversationMessage(d.chat_id, s.message_id).then((msg) => {
-                const content = msg && typeof msg.contents === 'string' ? msg.contents : null;
-                const t = time || formatTimeHM(msg && msg.date);
-                line.textContent = `${t || ''} ${fromLabel}: ${content != null ? content : `(message_id=${s.message_id})`}`.trim();
-              }).catch(() => {
-                line.textContent = `${time} ${fromLabel}: (message_id=${s.message_id})`;
-              });
+              line.dataset.msgId = String(s.message_id);
+              line.dataset.from = fromLabel;
             } else if (s.type === 'trigger') {
               line.textContent = `trigger -> ${s.triggered_flow_key} child=${s.child_request_id}`;
             } else if (s.type === 'goto') {
@@ -205,10 +229,46 @@
             } else {
               line.textContent = JSON.stringify(s);
             }
-            stepsWrap.appendChild(line);
+            return line;
           });
-          div.appendChild(stepsWrap);
+          lines.forEach((ln) => details.appendChild(ln));
+          // enrich message lines in batch per request
+          fetchMessagesForRequestMap(d.chat_id, d.request_id).then((map) => {
+            lines.forEach((ln) => {
+              const id = ln.dataset.msgId;
+              if (!id) return;
+              const msg = map.get(String(id));
+              const t = formatTimeHM(msg && msg.date);
+              const fromLabel = ln.dataset.from || '';
+              const content = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${id})`;
+              ln.textContent = `${t || ''} ${fromLabel}: ${content}`.trim();
+            });
+          }).catch(() => {
+            // fallback to single fetches
+            lines.forEach((ln) => {
+              const id = ln.dataset.msgId;
+              const fromLabel = ln.dataset.from || '';
+              if (!id) return;
+              fetchConversationMessage(d.chat_id, id).then((msg) => {
+                const t = formatTimeHM(msg && msg.date);
+                const content = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${id})`;
+                ln.textContent = `${t || ''} ${fromLabel}: ${content}`.trim();
+              }).catch(() => {});
+            });
+          });
         }
+
+        // toggle expand/collapse on click, ignore anchor clicks
+        div.addEventListener('click', (ev) => {
+          if (ev.target && ev.target.closest && ev.target.closest('a')) return;
+          const isShown = details.style.display !== 'none';
+          if (isShown) {
+            details.style.display = 'none';
+          } else {
+            buildDetailsOnce();
+            details.style.display = '';
+          }
+        });
 
         frag.appendChild(div);
       });
@@ -221,7 +281,8 @@
       } else {
         els.list.innerHTML = '';
         els.list.appendChild(frag);
-        els.list.scrollTop = 0;
+        // jump to bottom so newest is visible
+        els.list.scrollTop = els.list.scrollHeight;
       }
     }
 
@@ -262,9 +323,10 @@
       const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
       const snap = await getDocs(q);
       if (snap.empty) { renderEmpty(); return; }
-      const docs = snap.docs;
-      paging.last = docs[docs.length - 1];
-      renderRuns(docs, { prepend: false });
+      const docsDesc = snap.docs;
+      paging.last = docsDesc[docsDesc.length - 1];
+      const docsAsc = docsDesc.slice().reverse();
+      renderRuns(docsAsc, { prepend: false });
     }
 
     async function loadMore() {
@@ -277,13 +339,15 @@
       const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
       const snap = await getDocs(q);
       if (snap.empty) { paging.done = true; return; }
-      const docs = snap.docs;
-      paging.last = docs[docs.length - 1];
-      renderRuns(docs, { prepend: true });
+      const docsDesc = snap.docs;
+      paging.last = docsDesc[docsDesc.length - 1];
+      const docsAsc = docsDesc.slice().reverse();
+      renderRuns(docsAsc, { prepend: true });
     }
 
     els.list.addEventListener('scroll', () => {
-      if (els.list.scrollTop > (els.list.scrollHeight - els.list.clientHeight - 80)) {
+      // Load older runs when the user scrolls near the top
+      if (els.list.scrollTop < 80) {
         loadMore();
       }
     });
