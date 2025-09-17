@@ -547,37 +547,39 @@
       els.flowSteps.appendChild(grid);
 
       // Publish button: upload current flow.json to Cloud using OAuth token
-      els.btnPublish.addEventListener('click', async () => {
-        try {
-          if (!flowDoc) return;
-          loadStoredTokenOnly();
-          const btn = els.btnPublish;
-          const prev = btn.textContent;
-          btn.textContent = 'Saving…'; btn.disabled = true;
-          if (!hasValidToken()) throw new Error('Missing or expired token');
-          const { bucket, object } = getCfg();
-          if (!bucket || !object) throw new Error('Missing bucket/object');
-          const url = gcsUploadUrl(bucket, object);
-          const body = JSON.stringify(flowDoc || {}, null, 2);
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${oauth.accessToken}`,
-              'Content-Type': 'application/json; charset=utf-8'
-            },
-            body
-          });
-          const ok = res.ok;
-          btn.textContent = ok ? 'Published ✓' : 'Publish failed';
-          setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1400);
-        } catch (err) {
-          console.error('Publish error:', err);
-          const btn = els.btnPublish;
-          const prev = btn.textContent;
-          btn.textContent = 'Publish failed';
-          setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1400);
-        }
-      });
+      const btnPublish = document.getElementById('btnPublish');
+      if (btnPublish && !btnPublish.dataset.boundPublish) {
+        btnPublish.dataset.boundPublish = '1';
+        btnPublish.addEventListener('click', async () => {
+          try {
+            if (!flowDoc) return;
+            loadStoredTokenOnly();
+            const prev = btnPublish.textContent;
+            btnPublish.textContent = 'Saving…'; btnPublish.disabled = true;
+            if (!hasValidToken()) throw new Error('Missing or expired token');
+            const { bucket, object } = getCfg();
+            if (!bucket || !object) throw new Error('Missing bucket/object');
+            const url = gcsUploadUrl(bucket, object);
+            const body = JSON.stringify(flowDoc || {}, null, 2);
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${oauth.accessToken}`,
+                'Content-Type': 'application/json; charset=utf-8'
+              },
+              body
+            });
+            const ok = res.ok;
+            btnPublish.textContent = ok ? 'Published ✓' : 'Publish failed';
+            setTimeout(() => { btnPublish.textContent = prev; btnPublish.disabled = false; }, 1400);
+          } catch (err) {
+            console.error('Publish error:', err);
+            const prev = btnPublish.textContent;
+            btnPublish.textContent = 'Publish failed';
+            setTimeout(() => { btnPublish.textContent = prev; btnPublish.disabled = false; }, 1400);
+          }
+        });
+      }
     }
 
     function renderRuns(docs, { prepend } = { prepend: false }) {
