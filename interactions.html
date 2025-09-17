@@ -42,6 +42,12 @@
       width: 100%; box-sizing: border-box; background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 10px 12px; border-radius: 10px; outline: none; font-size: 13px;
     }
     .steps-view textarea { min-height: 60px; resize: vertical; }
+
+    /* Synced step/log grid for single view */
+    .steps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .steps-grid .cell { min-width: 0; }
+    .steps-grid .cell.right .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .steps-grid .cell.right .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -354,66 +360,57 @@
       return used;
     }
 
-    function renderFlowWithDimming(flowKey, flowDef, stepsLogs) {
-      els.flowTitle.textContent = `${flowKey}${flowDef && flowDef.trigger ? ' · ' + flowDef.trigger : ''}`;
-      els.flowSteps.innerHTML = '';
-      const steps = Array.isArray(flowDef.steps) ? flowDef.steps : [];
-      const executed = buildExecutedIndicesFromLogs(stepsLogs);
-      const gotoUsed = buildGotoUsageIndexes(flowDef, stepsLogs);
+    function buildStepLeftElement(st, idx, executed, gotoUsed) {
+      const wrap = document.createElement('div');
+      wrap.className = 'step';
+      const head = document.createElement('div');
+      head.style.display = 'flex'; head.style.alignItems = 'center'; head.style.marginBottom = '6px';
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      const type = st.ask ? 'ask' : (st.say ? 'say' : (st.wait ? 'wait' : (st.goto ? 'goto' : (st.label ? 'label' : (st.script ? 'script' : 'step')))));
+      badge.textContent = type.toUpperCase();
+      const idxEl = document.createElement('span');
+      idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
+      idxEl.textContent = '#' + (idx + 1);
+      head.appendChild(badge);
+      head.appendChild(idxEl);
+      wrap.appendChild(head);
+
+      if (st.ask != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
+        const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.addEventListener('input', (e) => { st.ask = e.target.value; });
+        field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
+        if (st.saveAs != null) {
+          const f2 = document.createElement('div'); f2.className = 'field';
+          const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
+          const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
+          f2.appendChild(l2); f2.appendChild(i2); wrap.appendChild(f2);
+        }
+      } else if (st.say != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
+        const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.addEventListener('input', (e) => { st.say = e.target.value; });
+        field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
+      } else {
+        const ro = document.createElement('div'); ro.className = 'field';
+        const l = document.createElement('div'); l.className = 'label'; l.textContent = 'details';
+        const v = document.createElement('div'); v.textContent = JSON.stringify(st);
+        ro.appendChild(l); ro.appendChild(v); wrap.appendChild(ro);
+      }
+
+      // Dimming logic
       const hasLaterExec = (i) => Array.from(executed).some((n) => n > i);
-
-      steps.forEach((st, idx) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'step';
-        const head = document.createElement('div');
-        head.style.display = 'flex'; head.style.alignItems = 'center'; head.style.marginBottom = '6px';
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        const type = st.ask ? 'ask' : (st.say ? 'say' : (st.wait ? 'wait' : (st.goto ? 'goto' : (st.label ? 'label' : (st.script ? 'script' : 'step')))));
-        badge.textContent = type.toUpperCase();
-        const idxEl = document.createElement('span');
-        idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
-        idxEl.textContent = '#' + (idx + 1);
-        head.appendChild(badge);
-        head.appendChild(idxEl);
-        wrap.appendChild(head);
-
-        if (st.ask != null) {
-          const field = document.createElement('div'); field.className = 'field';
-          const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
-          const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.addEventListener('input', (e) => { st.ask = e.target.value; });
-          field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
-          if (st.saveAs != null) {
-            const f2 = document.createElement('div'); f2.className = 'field';
-            const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
-            const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
-            f2.appendChild(l2); f2.appendChild(i2); wrap.appendChild(f2);
-          }
-        } else if (st.say != null) {
-          const field = document.createElement('div'); field.className = 'field';
-          const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
-          const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.addEventListener('input', (e) => { st.say = e.target.value; });
-          field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
-        } else {
-          const ro = document.createElement('div'); ro.className = 'field';
-          const l = document.createElement('div'); l.className = 'label'; l.textContent = 'details';
-          const v = document.createElement('div'); v.textContent = JSON.stringify(st);
-          ro.appendChild(l); ro.appendChild(v); wrap.appendChild(ro);
-        }
-
-        // Dimming logic
-        let dim = false;
-        if (st.goto) {
-          if (!gotoUsed.has(idx) && hasLaterExec(idx)) dim = true; // goto was skipped due to filters
-        }
-        if ((st.ask || st.say) && !executed.has(idx)) {
-          // step did not produce a message in logs → dim as unused
-          dim = true;
-        }
-        if (dim) wrap.classList.add('dimmed');
-
-        els.flowSteps.appendChild(wrap);
-      });
+      let dim = false;
+      if (st.goto) {
+        if (!gotoUsed.has(idx) && hasLaterExec(idx)) dim = true; // goto was skipped due to filters
+      }
+      if ((st.ask || st.say) && !executed.has(idx)) {
+        // step did not produce a message in logs → dim as unused
+        dim = true;
+      }
+      if (dim) wrap.classList.add('dimmed');
+      return wrap;
     }
 
     function formatTimeHM2(d) {
@@ -430,7 +427,6 @@
       await loadFlowJson();
       const flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
       const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
-      if (flow) renderFlowWithDimming(d.flow_key, flow, stepsLogs);
       // Ensure link goes to the sibling editor.html
       els.btnOpenEditor.href = buildUrlWithAuth('editor.html', {});
 
@@ -439,8 +435,10 @@
         els.flowTitle.textContent = `${d.flow_key} (not found in flow.json)`;
       }
 
-      // Right side: render by flow structure, grouping logs by step_index
+      // Right/messages: switch to synced grid rows under left panel; hide old right column
       els.singleMessages.innerHTML = '';
+      const rightCol = document.querySelector('.right-messages');
+      if (rightCol) rightCol.style.display = 'none';
       const convMap = await fetchMessagesForRequestMap(d.chat_id, d.request_id).catch(() => new Map());
 
       function toDate(val) {
@@ -501,38 +499,48 @@
         return line;
       }
 
-      // 1) Trigger group (messages that started the flow)
-      const triggerGroup = groups.get(-1) || [];
-      if (triggerGroup.length > 0) {
-        triggerGroup.sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
-        const wrap = document.createElement('div'); wrap.className = 'msg';
-        const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = 'Flow trigger';
-        wrap.appendChild(meta);
-        triggerGroup.forEach((s) => wrap.appendChild(renderEntry(s)));
-        els.singleMessages.appendChild(wrap);
-      }
+      // Build synced rows grid inside left panel
+      els.flowSteps.innerHTML = '';
+      const grid = document.createElement('div'); grid.className = 'steps-grid';
 
-      // 2) Per-step groups in flow order
       const stepDefs = (flow && Array.isArray(flow.steps)) ? flow.steps : [];
+      const executed = buildExecutedIndicesFromLogs(stepsLogs);
+      const gotoUsed = flow ? buildGotoUsageIndexes(flow, stepsLogs) : new Set();
+
+      // Row 0: Flow trigger (left label + right logs)
+      const triggerGroup = (groups.get(-1) || []).slice().sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
+      const triggerLeft = document.createElement('div'); triggerLeft.className = 'cell left';
+      const triggerBadge = document.createElement('span'); triggerBadge.className = 'badge'; triggerBadge.textContent = 'TRIGGER';
+      triggerLeft.appendChild(triggerBadge);
+      const triggerRight = document.createElement('div'); triggerRight.className = 'cell right';
+      if (triggerGroup.length === 0) {
+        const empty = document.createElement('div'); empty.style.color = '#94a3b8'; empty.textContent = '(no logs)';
+        triggerRight.appendChild(empty);
+      } else {
+        triggerGroup.forEach((s) => triggerRight.appendChild(renderEntry(s)));
+      }
+      grid.appendChild(triggerLeft);
+      grid.appendChild(triggerRight);
+
+      // Rows for each step
       for (let i = 0; i < stepDefs.length; i++) {
         const st = stepDefs[i] || {};
-        const stepEntries = (groups.get(i) || []).slice().sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
+        const leftCell = document.createElement('div'); leftCell.className = 'cell left';
+        leftCell.appendChild(buildStepLeftElement(st, i, executed, gotoUsed));
 
-        const groupWrap = document.createElement('div'); groupWrap.className = 'msg';
-        const head = document.createElement('div'); head.className = 'meta';
-        // derive step type/summary
-        const type = st.ask ? 'ASK' : (st.say ? 'SAY' : (st.wait ? 'WAIT' : (st.goto ? 'GOTO' : (st.label ? 'LABEL' : (st.script ? 'SCRIPT' : 'STEP')))));
-        const summary = st.ask ? String(st.ask).slice(0, 120) : (st.say ? String(st.say).slice(0, 120) : (st.goto ? `→ ${st.goto}` : ''));
-        head.textContent = `Step #${i + 1} · ${type}${summary ? ' · ' + summary : ''}`;
-        groupWrap.appendChild(head);
-        if (stepEntries.length === 0) {
+        const rightCell = document.createElement('div'); rightCell.className = 'cell right';
+        const entries = (groups.get(i) || []).slice().sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
+        if (entries.length === 0) {
           const empty = document.createElement('div'); empty.style.color = '#94a3b8'; empty.textContent = '(no logs)';
-          groupWrap.appendChild(empty);
+          rightCell.appendChild(empty);
         } else {
-          stepEntries.forEach((s) => groupWrap.appendChild(renderEntry(s)));
+          entries.forEach((s) => rightCell.appendChild(renderEntry(s)));
         }
-        els.singleMessages.appendChild(groupWrap);
+        grid.appendChild(leftCell);
+        grid.appendChild(rightCell);
       }
+
+      els.flowSteps.appendChild(grid);
 
       // Publish button: download current flow.json (simple)
       els.btnPublish.addEventListener('click', () => {
