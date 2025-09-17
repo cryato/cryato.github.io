@@ -455,9 +455,10 @@
           line.appendChild(meta); line.appendChild(body); msgsWrap.appendChild(line);
         } else if (s.type === 'goto') {
           const line = document.createElement('div'); line.className = 'msg';
-          const when = s && s.at ? new Date(s.at) : null;
+          const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
           const meta = document.createElement('div'); meta.className = 'meta';
-          meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}`;
+          const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+          meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}${idx}`;
           line.appendChild(meta); els.singleMessages.appendChild(line);
         }
       }
@@ -484,7 +485,7 @@
         const d = doc.data();
         const div = document.createElement('div');
         div.className = 'run';
-        const trigAt = d.flow_trigger && d.flow_trigger.triggered_at ? new Date(d.flow_trigger.triggered_at) : null;
+        const trigAt = d.flow_trigger && d.flow_trigger.triggered_at ? (typeof d.flow_trigger.triggered_at.toDate === 'function' ? d.flow_trigger.triggered_at.toDate() : new Date(d.flow_trigger.triggered_at)) : null;
         const meta = document.createElement('div');
         meta.className = 'meta';
         const reqLink = `<a href="${buildUrlWithAuth('interactions', { request_id: d.request_id })}">${d.request_id}</a>`;
@@ -516,17 +517,26 @@
               line.dataset.msgId = String(s.message_id);
               line.dataset.from = fromLabel;
             } else if (s.type === 'set_attributes') {
-              const when = s && s.at ? new Date(s.at) : null;
+              const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
               const time = formatTimeHM(when);
               const updates = s.updates && typeof s.updates === 'object' ? s.updates : {};
               const pairs = Object.entries(updates).map(([k, v]) => `${k} = ${String(v)}`);
               line.textContent = `${time} set_attributes: ${pairs.join(', ')}`.trim();
             } else if (s.type === 'trigger') {
-              line.textContent = `trigger -> ${s.triggered_flow_key} child=${s.child_request_id}`;
-            } else if (s.type === 'goto') {
-              const when = s && s.at ? new Date(s.at) : null;
+              const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
               const time = formatTimeHM(when);
-              line.textContent = `${time} goto -> ${s.label}`.trim();
+              const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+              line.textContent = `${time} trigger -> ${s.triggered_flow_key} child=${s.child_request_id}${idx}`.trim();
+            } else if (s.type === 'trigger') {
+              const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+              const time = formatTimeHM(when);
+              const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+              line.textContent = `${time} trigger -> ${s.triggered_flow_key} child=${s.child_request_id}${idx}`.trim();
+            } else if (s.type === 'goto') {
+              const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+              const time = formatTimeHM(when);
+              const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+              line.textContent = `${time} goto -> ${s.label}${idx}`.trim();
             } else {
               line.textContent = JSON.stringify(s);
             }
