@@ -223,7 +223,7 @@
               line.dataset.msgId = String(s.message_id);
               line.dataset.from = fromLabel;
             } else if (s.type === 'trigger') {
-              line.textContent = `trigger -> ${s.triggered_flow_key} child=${s.child_request_id}`;
+              line.textContent = `trigger -> ${s.triggered_flow_key} child=<a href="${buildUrlWithAuth('interactions', { request_id: s.child_request_id})}">${s.child_request_id}</a>`;
             } else if (s.type === 'goto') {
               line.textContent = `goto -> ${s.label}`;
             } else {
