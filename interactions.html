@@ -37,18 +37,11 @@
     .right-messages .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
     .right-messages .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
 
-    /* Grid-aligned single interaction view */
-    .flow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
-    .flow-cell, .log-cell { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; padding: 12px; }
-    .flow-cell .step { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
-    .log-cell .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
-    .log-cell .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
-
-    /* Dark inputs for editable fields (like editor.html) */
-    .steps-view input[type="text"], .steps-view textarea,
-    .flow-grid input[type="text"], .flow-grid textarea {
+    /* Dark inputs for editable fields (match editor.html) */
+    .steps-view input[type="text"], .steps-view textarea {
       width: 100%; box-sizing: border-box; background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 10px 12px; border-radius: 10px; outline: none; font-size: 13px;
     }
+    .steps-view textarea { min-height: 60px; resize: vertical; }
   </style>
 </head>
 <body>
@@ -98,15 +91,13 @@
           <a id="btnOpenEditor" class="btn" href="editor" target="_blank">Open in Editor</a>
         </div>
       </div>
-      <div id="flowGrid" class="flow-grid">
-        <div>
-          <div id="flowSteps" class="steps-view"></div>
-        </div>
-        <div class="log-cell">
-          <div class="flow-head"><div class="flow-title">Interaction Log</div></div>
-          <div id="singleMessages"></div>
-        </div>
+      <div id="flowSteps" class="steps-view"></div>
+    </div>
+    <div class="column right-messages">
+      <div class="flow-head">
+        <div class="flow-title">Interaction Log</div>
       </div>
+      <div id="singleMessages"></div>
     </div>
   </div>
 
@@ -421,13 +412,6 @@
         }
         if (dim) wrap.classList.add('dimmed');
 
-        // For alignment: attach a placeholder container for messages per step index
-        wrap.dataset.stepIndex = String(idx);
-        const anchor = document.createElement('div');
-        anchor.id = `step-anchor-${idx}`;
-        anchor.style.height = '1px';
-        anchor.style.visibility = 'hidden';
-        wrap.appendChild(anchor);
         els.flowSteps.appendChild(wrap);
       });
     }
@@ -455,42 +439,29 @@
         els.flowTitle.textContent = `${d.flow_key} (not found in flow.json)`;
       }
 
-      // Right side: render messages aligned to step indices
+      // Right side: render messages and gotos
       els.singleMessages.innerHTML = '';
+      const msgsWrap = document.createDocumentFragment();
       const convMap = await fetchMessagesForRequestMap(d.chat_id, d.request_id).catch(() => new Map());
-      const byStep = new Map();
       for (const s of stepsLogs) {
-        const key = (s && Number.isFinite(s.step_index)) ? Number(s.step_index) : (s.type === 'goto' ? 'goto' : null);
-        if (key == null) continue;
-        if (!byStep.has(key)) byStep.set(key, []);
-        byStep.get(key).push(s);
-      }
-      const frag = document.createDocumentFragment();
-      const stepsCount = Array.isArray(flow && flow.steps) ? flow.steps.length : 0;
-      for (let i = 0; i < stepsCount; i++) {
-        const list = byStep.get(i) || [];
-        for (const s of list) {
+        if (s.type === 'message') {
           const line = document.createElement('div'); line.className = 'msg';
-          if (s.type === 'message') {
-            const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
-            const meta = document.createElement('div'); meta.className = 'meta';
-            const msg = convMap.get(String(s.message_id));
-            meta.textContent = `${formatTimeHM2(when)} · ${s.from} · step #${s.step_index}`;
-            const body = document.createElement('div');
-            body.textContent = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${s.message_id})`;
-            line.appendChild(meta); line.appendChild(body);
-          } else if (s.type === 'goto') {
-            const when = s && s.at ? new Date(s.at) : null;
-            const meta = document.createElement('div'); meta.className = 'meta';
-            meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}`;
-            line.appendChild(meta);
-          }
-          // Add an anchor attribute for possible future scroll-sync
-          line.dataset.alignStepIndex = String(i);
-          frag.appendChild(line);
+          const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+          const meta = document.createElement('div'); meta.className = 'meta';
+          const msg = convMap.get(String(s.message_id));
+          meta.textContent = `${formatTimeHM2(when)} · ${s.from} · step #${s.step_index}`;
+          const body = document.createElement('div');
+          body.textContent = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${s.message_id})`;
+          line.appendChild(meta); line.appendChild(body); msgsWrap.appendChild(line);
+        } else if (s.type === 'goto') {
+          const line = document.createElement('div'); line.className = 'msg';
+          const when = s && s.at ? new Date(s.at) : null;
+          const meta = document.createElement('div'); meta.className = 'meta';
+          meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}`;
+          line.appendChild(meta); els.singleMessages.appendChild(line);
         }
       }
-      els.singleMessages.appendChild(frag);
+      els.singleMessages.appendChild(msgsWrap);
 
       // Publish button: download current flow.json (simple)
       els.btnPublish.addEventListener('click', () => {
