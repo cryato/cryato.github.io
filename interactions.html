@@ -94,7 +94,8 @@
       <div class="flow-head">
         <div class="flow-title" id="flowTitle">Flow</div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <button id="btnPublish" class="btn">Publish</button>
+          <button id="btnSaveCloud" class="btn">Publish</button>
+          <!-- <button id="btnPublish" class="btn">Publish</button> -->
           <a id="btnOpenEditor" class="btn" href="editor" target="_blank">Open in Editor</a>
         </div>
       </div>
@@ -255,6 +256,9 @@
     function gcsDownloadUrl(bucket, objectPath) {
       return `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}?alt=media`;
     }
+    function gcsUploadUrl(bucket, objectPath) {
+      return `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
+    }
 
     function loadStoredTokenOnly() {
       try {
@@ -341,6 +345,30 @@
         } catch (_) {}
       }
       flowDoc = { flows: {} };
+    }
+
+    async function saveFlowJsonToCloud(doc) {
+      try {
+        loadStoredTokenOnly();
+        if (!hasValidToken()) throw new Error('Missing or expired token');
+        const { bucket, object } = getCfg();
+        if (!bucket || !object) throw new Error('Missing bucket/object');
+        const url = gcsUploadUrl(bucket, object);
+        const body = JSON.stringify(doc || {}, null, 2);
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${oauth.accessToken}`,
+            'Content-Type': 'application/json; charset=utf-8'
+          },
+          body
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        return true;
+      } catch (err) {
+        console.error('saveFlowJsonToCloud error:', err);
+        return false;
+      }
     }
 
     function buildExecutedIndicesFromLogs(steps) {
@@ -556,6 +584,19 @@
           setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
         } catch (_) {}
       }, { once: true });
+
+      // Save to Cloud: upload current flow.json via OAuth token
+      els.btnSaveCloud.addEventListener('click', async () => {
+        try {
+          if (!flowDoc) return;
+          const ok = await saveFlowJsonToCloud(flowDoc);
+          const btn = els.btnSaveCloud;
+          const prev = btn.textContent;
+          btn.textContent = ok ? 'Saved ✓' : 'Save failed';
+          btn.disabled = true;
+          setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1400);
+        } catch (_) {}
+      });
     }
 
     function renderRuns(docs, { prepend } = { prepend: false }) {
