@@ -226,18 +226,32 @@
     let flowDoc = null;
 
     async function loadFlowJson() {
-      try {
-        const res = await fetch(buildUrlWithAuth('flow.json', {}), { cache: 'no-store' });
-        if (!res.ok) throw new Error('flow.json load failed');
-        flowDoc = await res.json();
-      } catch (_) {
-        try {
-          const res2 = await fetch('flow.json', { cache: 'no-store' });
-          flowDoc = res2.ok ? await res2.json() : { flows: {} };
-        } catch (__) {
-          flowDoc = { flows: {} };
-        }
+      // Try multiple candidates to account for hosting under /interface/ and repo base paths
+      const candidates = [];
+      const cur = new URL(location.href);
+      // 1) repo root path: strip last two segments (e.g., /repo/interface/ -> /repo/flow.json)
+      const parts = cur.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2) {
+        const base = '/' + parts.slice(0, parts.length - 2).join('/') + '/flow.json';
+        candidates.push(base);
       }
+      // 2) sibling in same dir (likely wrong but cheap)
+      candidates.push('flow.json');
+      // 3) one level up
+      candidates.push('../flow.json');
+      // 4) two levels up
+      candidates.push('../../flow.json');
+      // 5) absolute root (may be wrong on GH Pages but fine locally)
+      candidates.push('/flow.json');
+
+      for (const rel of candidates) {
+        try {
+          const url = new URL(rel, cur);
+          const res = await fetch(url.toString(), { cache: 'no-store' });
+          if (res.ok) { flowDoc = await res.json(); return; }
+        } catch (_) {}
+      }
+      flowDoc = { flows: {} };
     }
 
     function buildExecutedIndicesFromLogs(steps) {
@@ -335,7 +349,13 @@
       const flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
       const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
       if (flow) renderFlowWithDimming(d.flow_key, flow, stepsLogs);
-      els.btnOpenEditor.href = buildUrlWithAuth('editor', {});
+      // Ensure link goes to the sibling editor.html
+      els.btnOpenEditor.href = buildUrlWithAuth('editor.html', {});
+
+      // If flow not found, show a note
+      if (!flow) {
+        els.flowTitle.textContent = `${d.flow_key} (not found in flow.json)`;
+      }
 
       // Right side: render messages and gotos
       els.singleMessages.innerHTML = '';
