@@ -25,6 +25,18 @@
     .step { font-size: 12px; color: #cbd5e1; margin: 6px 0; }
     a { color: #93c5fd; }
     .empty { color: var(--muted); padding: 16px; }
+
+    /* Single interaction view */
+    .single { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+    .column { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; padding: 12px; min-height: calc(100vh - 130px); overflow: auto; }
+    .flow-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .flow-title { font-size: 16px; font-weight: 600; }
+    .btn { appearance: none; border: 1px solid #283449; background: linear-gradient(180deg, #0b1224 0%, #0a1222 100%); color: #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+    .steps-view .step { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .dimmed { opacity: 0.5; }
+    .badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; border: 1px solid #1f2937; background: rgba(15,23,42,0.6); color: #b3e1ff; margin-right: 8px; }
+    .right-messages .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .right-messages .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -36,7 +48,7 @@
     </div>
   </header>
 
-  <div class="container">
+  <div id="viewList" class="container" style="display:none;">
     <div class="panel left">
       <div class="field">
         <div class="label">Request ID</div>
@@ -62,6 +74,25 @@
     </div>
     <div class="panel">
       <div id="list" class="list"></div>
+    </div>
+  </div>
+
+  <div id="viewSingle" class="single" style="display:none;">
+    <div class="column">
+      <div class="flow-head">
+        <div class="flow-title" id="flowTitle">Flow</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="btnPublish" class="btn">Publish</button>
+          <a id="btnOpenEditor" class="btn" href="editor" target="_blank">Open in Editor</a>
+        </div>
+      </div>
+      <div id="flowSteps" class="steps-view"></div>
+    </div>
+    <div class="column right-messages">
+      <div class="flow-head">
+        <div class="flow-title">Interaction Log</div>
+      </div>
+      <div id="singleMessages"></div>
     </div>
   </div>
 
@@ -106,7 +137,14 @@
       inpEnd: document.getElementById('inpEnd'),
       btnApply: document.getElementById('btnApply'),
       btnReload: document.getElementById('btnReload'),
-      list: document.getElementById('list')
+      list: document.getElementById('list'),
+      viewList: document.getElementById('viewList'),
+      viewSingle: document.getElementById('viewSingle'),
+      flowTitle: document.getElementById('flowTitle'),
+      flowSteps: document.getElementById('flowSteps'),
+      singleMessages: document.getElementById('singleMessages'),
+      btnPublish: document.getElementById('btnPublish'),
+      btnOpenEditor: document.getElementById('btnOpenEditor')
     };
 
     // Caches
@@ -324,7 +362,7 @@
         const docRef = doc(db, 'interactions', requestId);
         const snap = await getDoc(docRef);
         if (!snap.exists()) { renderEmpty(); return; }
-        renderRuns([snap], { prepend: false });
+        await renderSingleInteraction(snap);
         return;
       }
 
@@ -385,6 +423,155 @@
       if (!user) await signInAnonymously(auth);
       await loadInitial();
     });
+
+    // ---------- Single Interaction Rendering ----------
+    let flowDoc = null;
+
+    async function loadFlowJson() {
+      try {
+        const res = await fetch('flow.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to load flow.json');
+        flowDoc = await res.json();
+      } catch (_) {
+        flowDoc = { flows: {} };
+      }
+    }
+
+    function buildExecutedIndicesFromLogs(steps) {
+      const set = new Set();
+      steps.forEach((s) => {
+        if (s && s.type === 'message' && Number.isFinite(s.step_index)) set.add(Number(s.step_index));
+      });
+      return set;
+    }
+
+    function buildGotoUsageIndexes(flowDef, stepsLogs) {
+      const used = new Set();
+      const loggedLabels = new Set(stepsLogs.filter((s) => s && s.type === 'goto' && s.label).map((s) => String(s.label)));
+      const steps = Array.isArray(flowDef.steps) ? flowDef.steps : [];
+      steps.forEach((st, idx) => {
+        if (st && st.goto && loggedLabels.has(String(st.goto))) used.add(idx);
+      });
+      return used;
+    }
+
+    function renderFlowWithDimming(flowKey, flowDef, stepsLogs) {
+      els.flowTitle.textContent = `${flowKey}${flowDef && flowDef.trigger ? ' · ' + flowDef.trigger : ''}`;
+      els.flowSteps.innerHTML = '';
+      const steps = Array.isArray(flowDef.steps) ? flowDef.steps : [];
+      const executed = buildExecutedIndicesFromLogs(stepsLogs);
+      const gotoUsed = buildGotoUsageIndexes(flowDef, stepsLogs);
+      const hasLaterExec = (i) => Array.from(executed).some((n) => n > i);
+
+      steps.forEach((st, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'step';
+        const head = document.createElement('div');
+        head.style.display = 'flex'; head.style.alignItems = 'center'; head.style.marginBottom = '6px';
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        const type = st.ask ? 'ask' : (st.say ? 'say' : (st.wait ? 'wait' : (st.goto ? 'goto' : (st.label ? 'label' : (st.script ? 'script' : 'step')))));
+        badge.textContent = type.toUpperCase();
+        const idxEl = document.createElement('span');
+        idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
+        idxEl.textContent = '#' + (idx + 1);
+        head.appendChild(badge);
+        head.appendChild(idxEl);
+        wrap.appendChild(head);
+
+        // Editable ask/say
+        if (st.ask != null) {
+          const field = document.createElement('div'); field.className = 'field';
+          const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
+          const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.addEventListener('input', (e) => { st.ask = e.target.value; });
+          field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
+          if (st.saveAs != null) {
+            const f2 = document.createElement('div'); f2.className = 'field';
+            const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
+            const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
+            f2.appendChild(l2); f2.appendChild(i2); wrap.appendChild(f2);
+          }
+        } else if (st.say != null) {
+          const field = document.createElement('div'); field.className = 'field';
+          const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
+          const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.addEventListener('input', (e) => { st.say = e.target.value; });
+          field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
+        } else {
+          const ro = document.createElement('div'); ro.className = 'field';
+          const l = document.createElement('div'); l.className = 'label'; l.textContent = 'details';
+          const v = document.createElement('div'); v.textContent = JSON.stringify(st);
+          ro.appendChild(l); ro.appendChild(v); wrap.appendChild(ro);
+        }
+
+        // Dimming logic
+        let dim = false;
+        if (st.goto) {
+          if (!gotoUsed.has(idx) && hasLaterExec(idx)) dim = true; // goto was skipped due to filters
+        }
+        if ((st.ask || st.say) && !executed.has(idx)) {
+          // step did not produce a message in logs → dim as unused
+          dim = true;
+        }
+        if (dim) wrap.classList.add('dimmed');
+
+        els.flowSteps.appendChild(wrap);
+      });
+    }
+
+    function formatTimeHM2(d) {
+      if (!d) return '';
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+
+    async function renderSingleInteraction(snap) {
+      els.viewList.style.display = 'none';
+      els.viewSingle.style.display = '';
+      const d = snap.data();
+      await loadFlowJson();
+      const flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
+      const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
+      if (flow) renderFlowWithDimming(d.flow_key, flow, stepsLogs);
+      els.btnOpenEditor.href = buildUrlWithAuth('editor', {});
+
+      // Right side: render messages and gotos
+      els.singleMessages.innerHTML = '';
+      // Messages
+      const msgsWrap = document.createDocumentFragment();
+      for (const s of stepsLogs) {
+        if (s.type === 'message') {
+          const line = document.createElement('div'); line.className = 'msg';
+          const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+          const meta = document.createElement('div'); meta.className = 'meta';
+          meta.textContent = `${formatTimeHM2(when)} · ${s.from} · step #${s.step_index}`;
+          const body = document.createElement('div'); body.textContent = `message_id=${s.message_id}`;
+          line.appendChild(meta); line.appendChild(body); msgsWrap.appendChild(line);
+        } else if (s.type === 'goto') {
+          const line = document.createElement('div'); line.className = 'msg';
+          const when = s && s.at ? new Date(s.at) : null;
+          const meta = document.createElement('div'); meta.className = 'meta';
+          meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}`;
+          line.appendChild(meta); els.singleMessages.appendChild(line);
+        }
+      }
+      els.singleMessages.appendChild(msgsWrap);
+
+      // Publish button (open Editor flow for full features)
+      els.btnPublish.addEventListener('click', () => {
+        // Minimal: download edited flow.json; users can publish via Editor
+        try {
+          if (!flowDoc) return;
+          const json = JSON.stringify(flowDoc, null, 2);
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'flow.json';
+          document.body.appendChild(a); a.click();
+          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+        } catch (_) {}
+      }, { once: true });
+    }
   </script>
 </body>
 </html>
