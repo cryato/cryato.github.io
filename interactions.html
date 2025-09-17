@@ -109,6 +109,35 @@
       list: document.getElementById('list')
     };
 
+    // Cache conversation messages to avoid duplicate fetches
+    const conversationsCache = new Map();
+
+    function formatTimeHM(input) {
+      if (!input) return '';
+      const d = (input && typeof input.toDate === 'function') ? input.toDate() : (input instanceof Date ? input : new Date(input));
+      if (!Number.isFinite(d.getTime())) return '';
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+
+    async function fetchConversationMessage(chatId, messageId) {
+      if (!chatId || messageId == null) return null;
+      const key = `${chatId}_${messageId}`;
+      if (conversationsCache.has(key)) return conversationsCache.get(key);
+      const p = (async () => {
+        try {
+          const ref = doc(db, 'conversations', key);
+          const snap = await getDoc(ref);
+          return snap.exists() ? snap.data() : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      conversationsCache.set(key, p);
+      return p;
+    }
+
     const url = new URL(location.href);
     const initialRequestId = url.searchParams.get('request_id') || '';
     const initialUserId = url.searchParams.get('user_id') || '';
@@ -157,8 +186,18 @@
             const line = document.createElement('div');
             line.className = 'step';
             if (s.type === 'message') {
-              const when = s.date ? new Date(s.date) : null;
-              line.textContent = `[${when ? when.toLocaleString() : ''}] message from ${s.from} (message_id=${s.message_id}) step=${s.step_index}`;
+              const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+              const time = formatTimeHM(when);
+              const fromLabel = s.from === 'user' ? 'User' : 'Bot';
+              line.textContent = `${time} ${fromLabel}: …`;
+              // Enrich with message contents from conversations
+              fetchConversationMessage(d.chat_id, s.message_id).then((msg) => {
+                const content = msg && typeof msg.contents === 'string' ? msg.contents : null;
+                const t = time || formatTimeHM(msg && msg.date);
+                line.textContent = `${t || ''} ${fromLabel}: ${content != null ? content : `(message_id=${s.message_id})`}`.trim();
+              }).catch(() => {
+                line.textContent = `${time} ${fromLabel}: (message_id=${s.message_id})`;
+              });
             } else if (s.type === 'trigger') {
               line.textContent = `trigger -> ${s.triggered_flow_key} child=${s.child_request_id}`;
             } else if (s.type === 'goto') {
