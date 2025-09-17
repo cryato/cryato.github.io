@@ -27,7 +27,7 @@
     .empty { color: var(--muted); padding: 16px; }
 
     /* Single interaction view */
-    .single { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+    .single { display: grid; grid-template-columns: 1fr; gap: 16px; padding: 16px; }
     .column { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; padding: 12px; min-height: calc(100vh - 130px); overflow: auto; }
     .flow-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .flow-title { font-size: 16px; font-weight: 600; }
@@ -44,8 +44,9 @@
     .steps-view textarea { min-height: 60px; resize: vertical; }
 
     /* Synced step/log grid for single view */
-    .steps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .steps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: stretch; }
     .steps-grid .cell { min-width: 0; }
+    .steps-grid .cell.right { display: flex; flex-direction: column; justify-content: center; }
     .steps-grid .cell.right .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
     .steps-grid .cell.right .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
   </style>
