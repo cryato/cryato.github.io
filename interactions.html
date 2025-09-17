@@ -129,6 +129,9 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
+    // Minimal OAuth token state reused from Editor (read-only)
+    let oauth = { accessToken: '', tokenExpiresAt: 0 };
+
     const els = {
       inpRequestId: document.getElementById('inpRequestId'),
       inpUserId: document.getElementById('inpUserId'),
@@ -225,8 +228,81 @@
     // ---------- Flow Single View Helpers ----------
     let flowDoc = null;
 
+    function getCfg() {
+      try {
+        const stored = JSON.parse(localStorage.getItem('gcs_config') || '{}');
+        const bucket = (stored.bucket || '').trim();
+        const object = 'flow.json';
+        return { bucket, object };
+      } catch (_) {
+        return { bucket: '', object: 'flow.json' };
+      }
+    }
+
+    function gcsDownloadUrl(bucket, objectPath) {
+      return `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}?alt=media`;
+    }
+
+    function loadStoredTokenOnly() {
+      try {
+        const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
+        const { accessToken, tokenExpiresAt } = stored;
+        if (accessToken && Number.isFinite(tokenExpiresAt)) {
+          oauth.accessToken = accessToken;
+          oauth.tokenExpiresAt = tokenExpiresAt;
+        }
+      } catch (_) {}
+    }
+
+    function hasValidToken() {
+      return !!(oauth.accessToken && Date.now() < oauth.tokenExpiresAt - 5000);
+    }
+
+    function setCookie(name, value, days) {
+      try {
+        const d = new Date();
+        d.setTime(d.getTime() + (days*24*60*60*1000));
+        const expires = `expires=${d.toUTCString()}`;
+        document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}; ${expires}; path=/; SameSite=Lax`;
+      } catch (_) {}
+    }
+
+    async function ensureFirebaseCookiesFromBucket() {
+      try {
+        const { bucket } = getCfg();
+        if (!bucket || !hasValidToken()) return;
+        const url = gcsDownloadUrl(bucket, 'firebase_config.json');
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json && typeof json === 'object') {
+          if (json.projectId) setCookie('projectId', json.projectId, 365);
+          if (json.apiKey) setCookie('apiKey', json.apiKey, 365);
+          if (json.authDomain) setCookie('authDomain', json.authDomain, 365);
+        }
+      } catch (_) {}
+    }
+
     async function loadFlowJson() {
-      // Try multiple candidates to account for hosting under /interface/ and repo base paths
+      // 0) Try Google Cloud Storage if configured and token available
+      try {
+        loadStoredTokenOnly();
+        if (hasValidToken()) {
+          const { bucket, object } = getCfg();
+          if (bucket && object) {
+            const url = gcsDownloadUrl(bucket, object);
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+            if (res.ok) {
+              flowDoc = await res.json();
+              // Also ensure Firebase cookies for Firestore SDK
+              ensureFirebaseCookiesFromBucket().catch(() => {});
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 1) Try multiple site-local candidates to account for hosting under /interface/
       const candidates = [];
       const cur = new URL(location.href);
       // 1) repo root path: strip last two segments (e.g., /repo/interface/ -> /repo/flow.json)
