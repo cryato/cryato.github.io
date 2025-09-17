@@ -439,30 +439,100 @@
         els.flowTitle.textContent = `${d.flow_key} (not found in flow.json)`;
       }
 
-      // Right side: render messages and gotos
+      // Right side: render by flow structure, grouping logs by step_index
       els.singleMessages.innerHTML = '';
-      const msgsWrap = document.createDocumentFragment();
       const convMap = await fetchMessagesForRequestMap(d.chat_id, d.request_id).catch(() => new Map());
-      for (const s of stepsLogs) {
+
+      function toDate(val) {
+        if (!val) return null;
+        if (typeof val.toDate === 'function') return val.toDate();
+        return new Date(val);
+      }
+
+      function getWhen(s) {
+        if (!s) return null;
+        if (s.type === 'message') return toDate(s.date);
+        return toDate(s.date);
+      }
+
+      // Build groups: -1 for trigger (step_index == null), 0..N-1 for steps
+      const groups = new Map();
+      const pushToGroup = (idx, entry) => {
+        const key = Number.isFinite(idx) ? idx : -1;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
+      };
+
+      (stepsLogs || []).forEach((s) => {
+        const idx = Number.isFinite(s.step_index) ? s.step_index : -1;
+        pushToGroup(idx, s);
+      });
+
+      // Helper to render one entry line inside a step group
+      function renderEntry(s) {
+        const line = document.createElement('div'); line.className = 'msg';
+        const when = getWhen(s);
+        const meta = document.createElement('div'); meta.className = 'meta';
         if (s.type === 'message') {
-          const line = document.createElement('div'); line.className = 'msg';
-          const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
-          const meta = document.createElement('div'); meta.className = 'meta';
           const msg = convMap.get(String(s.message_id));
           meta.textContent = `${formatTimeHM2(when)} · ${s.from} · step #${s.step_index}`;
           const body = document.createElement('div');
           body.textContent = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${s.message_id})`;
-          line.appendChild(meta); line.appendChild(body); msgsWrap.appendChild(line);
+          line.appendChild(meta); line.appendChild(body);
         } else if (s.type === 'goto') {
-          const line = document.createElement('div'); line.className = 'msg';
-          const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
-          const meta = document.createElement('div'); meta.className = 'meta';
           const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
           meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}${idx}`;
-          line.appendChild(meta); els.singleMessages.appendChild(line);
+          line.appendChild(meta);
+        } else if (s.type === 'trigger') {
+          const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+          meta.textContent = `${formatTimeHM2(when)} · trigger → ${s.triggered_flow_key} child=${s.child_request_id}${idx}`;
+          line.appendChild(meta);
+        } else if (s.type === 'set_attributes') {
+          const updates = s.updates && typeof s.updates === 'object' ? s.updates : {};
+          const pairs = Object.entries(updates).map(([k, v]) => `${k} = ${String(v)}`);
+          meta.textContent = `${formatTimeHM2(when)} · set_attributes`;
+          const body = document.createElement('div'); body.textContent = pairs.join(', ');
+          line.appendChild(meta); line.appendChild(body);
+        } else {
+          meta.textContent = `${formatTimeHM2(when)} · ${s.type || 'action'}`;
+          const body = document.createElement('div'); body.textContent = JSON.stringify(s);
+          line.appendChild(meta); line.appendChild(body);
         }
+        return line;
       }
-      els.singleMessages.appendChild(msgsWrap);
+
+      // 1) Trigger group (messages that started the flow)
+      const triggerGroup = groups.get(-1) || [];
+      if (triggerGroup.length > 0) {
+        triggerGroup.sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
+        const wrap = document.createElement('div'); wrap.className = 'msg';
+        const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = 'Flow trigger';
+        wrap.appendChild(meta);
+        triggerGroup.forEach((s) => wrap.appendChild(renderEntry(s)));
+        els.singleMessages.appendChild(wrap);
+      }
+
+      // 2) Per-step groups in flow order
+      const stepDefs = (flow && Array.isArray(flow.steps)) ? flow.steps : [];
+      for (let i = 0; i < stepDefs.length; i++) {
+        const st = stepDefs[i] || {};
+        const stepEntries = (groups.get(i) || []).slice().sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
+
+        const groupWrap = document.createElement('div'); groupWrap.className = 'msg';
+        const head = document.createElement('div'); head.className = 'meta';
+        // derive step type/summary
+        const type = st.ask ? 'ASK' : (st.say ? 'SAY' : (st.wait ? 'WAIT' : (st.goto ? 'GOTO' : (st.label ? 'LABEL' : (st.script ? 'SCRIPT' : 'STEP')))));
+        const summary = st.ask ? String(st.ask).slice(0, 120) : (st.say ? String(st.say).slice(0, 120) : (st.goto ? `→ ${st.goto}` : ''));
+        head.textContent = `Step #${i + 1} · ${type}${summary ? ' · ' + summary : ''}`;
+        groupWrap.appendChild(head);
+        if (stepEntries.length === 0) {
+          const empty = document.createElement('div'); empty.style.color = '#94a3b8'; empty.textContent = '(no logs)';
+          groupWrap.appendChild(empty);
+        } else {
+          stepEntries.forEach((s) => groupWrap.appendChild(renderEntry(s)));
+        }
+        els.singleMessages.appendChild(groupWrap);
+      }
 
       // Publish button: download current flow.json (simple)
       els.btnPublish.addEventListener('click', () => {
