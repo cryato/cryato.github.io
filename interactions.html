@@ -26,28 +26,16 @@
     a { color: #93c5fd; }
     .empty { color: var(--muted); padding: 16px; }
 
-    /* Single interaction combined view */
-    .combined-panel { display: none; padding: 12px; }
-    .combined-scroll { height: calc(100vh - 120px); overflow: auto; }
-    .combined { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; padding: 8px; }
-    .flow-col { position: relative; }
-    .flow-steps { padding: 8px; }
-    .flow-step { padding: 14px; margin: 12px 0; border-radius: 12px; border: 1px solid #1f2937; background: rgba(2,6,23,0.55); }
-    .flow-step .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid #1f2937; background: rgba(15,23,42,0.6); color: #b3e1ff; }
-    .dimmed { opacity: 0.45; filter: grayscale(0.2); }
-    .flow-field { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: start; margin: 8px 0; }
-    .flow-label { color: var(--muted); font-size: 12px; padding-top: 6px; }
-    .flow-input, .flow-textarea { width: 100%; box-sizing: border-box; background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 10px 12px; border-radius: 10px; outline: none; font-size: 13px; }
-    .flow-textarea { min-height: 60px; resize: vertical; }
-    .flow-toolbar { display: flex; gap: 8px; justify-content: space-between; align-items: center; margin: 8px; }
-    .btn { appearance: none; border: 1px solid #283449; background: linear-gradient(180deg, #0b1224 0%, #0a1222 100%); color: #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
-    .btn.accent { border-color: rgba(139,92,246,0.6); }
-    .msgs-col { position: relative; }
-    .msgs-layer { position: relative; min-height: 100%; }
-    .msg-group { position: absolute; left: 0; right: 0; }
-    .msg-bubble { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 8px 10px; margin: 6px 0; font-size: 12px; }
-    .msg-meta { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+    /* Single interaction view */
+    .single { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+    .column { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; padding: 12px; min-height: calc(100vh - 130px); overflow: auto; }
+    .flow-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .flow-title { font-size: 16px; font-weight: 600; }
+    .steps-view .step { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .dimmed { opacity: 0.5; }
+    .badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; border: 1px solid #1f2937; background: rgba(15,23,42,0.6); color: #b3e1ff; margin-right: 8px; }
+    .right-messages .msg { border: 1px solid #1f2937; background: rgba(2,6,23,0.55); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .right-messages .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -59,7 +47,7 @@
     </div>
   </header>
 
-  <div class="container">
+  <div id="viewList" class="container" style="display:none;">
     <div class="panel left">
       <div class="field">
         <div class="label">Request ID</div>
@@ -86,23 +74,24 @@
     <div class="panel">
       <div id="list" class="list"></div>
     </div>
-    <div id="combinedPanel" class="panel combined-panel">
-      <div class="flow-toolbar">
-        <div id="flowTitle" style="font-weight:700;"></div>
-        <div>
-          <button id="btnPublish" class="btn accent">Publish</button>
+  </div>
+
+  <div id="viewSingle" class="single" style="display:none;">
+    <div class="column">
+      <div class="flow-head">
+        <div class="flow-title" id="flowTitle">Flow</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="btnPublish" class="btn">Publish</button>
+          <a id="btnOpenEditor" class="btn" href="editor" target="_blank">Open in Editor</a>
         </div>
       </div>
-      <div id="combinedScroll" class="combined-scroll">
-        <div class="combined">
-          <div class="flow-col">
-            <div id="flowSteps" class="flow-steps"></div>
-          </div>
-          <div class="msgs-col">
-            <div id="msgsLayer" class="msgs-layer"></div>
-          </div>
-        </div>
+      <div id="flowSteps" class="steps-view"></div>
+    </div>
+    <div class="column right-messages">
+      <div class="flow-head">
+        <div class="flow-title">Interaction Log</div>
       </div>
+      <div id="singleMessages"></div>
     </div>
   </div>
 
@@ -148,12 +137,13 @@
       btnApply: document.getElementById('btnApply'),
       btnReload: document.getElementById('btnReload'),
       list: document.getElementById('list'),
-      combinedPanel: document.getElementById('combinedPanel'),
-      combinedScroll: document.getElementById('combinedScroll'),
-      flowSteps: document.getElementById('flowSteps'),
-      msgsLayer: document.getElementById('msgsLayer'),
+      viewList: document.getElementById('viewList'),
+      viewSingle: document.getElementById('viewSingle'),
       flowTitle: document.getElementById('flowTitle'),
-      btnPublish: document.getElementById('btnPublish')
+      flowSteps: document.getElementById('flowSteps'),
+      singleMessages: document.getElementById('singleMessages'),
+      btnPublish: document.getElementById('btnPublish'),
+      btnOpenEditor: document.getElementById('btnOpenEditor')
     };
 
     // Caches
@@ -230,6 +220,160 @@
 
     function renderEmpty() {
       els.list.innerHTML = '<div class="empty">No runs</div>';
+    }
+
+    // ---------- Flow Single View Helpers ----------
+    let flowDoc = null;
+
+    async function loadFlowJson() {
+      try {
+        const res = await fetch(buildUrlWithAuth('flow.json', {}), { cache: 'no-store' });
+        if (!res.ok) throw new Error('flow.json load failed');
+        flowDoc = await res.json();
+      } catch (_) {
+        try {
+          const res2 = await fetch('flow.json', { cache: 'no-store' });
+          flowDoc = res2.ok ? await res2.json() : { flows: {} };
+        } catch (__) {
+          flowDoc = { flows: {} };
+        }
+      }
+    }
+
+    function buildExecutedIndicesFromLogs(steps) {
+      const set = new Set();
+      steps.forEach((s) => {
+        if (s && s.type === 'message' && Number.isFinite(s.step_index)) set.add(Number(s.step_index));
+      });
+      return set;
+    }
+
+    function buildGotoUsageIndexes(flowDef, stepsLogs) {
+      const used = new Set();
+      const loggedLabels = new Set(stepsLogs.filter((s) => s && s.type === 'goto' && s.label).map((s) => String(s.label)));
+      const steps = Array.isArray(flowDef.steps) ? flowDef.steps : [];
+      steps.forEach((st, idx) => {
+        if (st && st.goto && loggedLabels.has(String(st.goto))) used.add(idx);
+      });
+      return used;
+    }
+
+    function renderFlowWithDimming(flowKey, flowDef, stepsLogs) {
+      els.flowTitle.textContent = `${flowKey}${flowDef && flowDef.trigger ? ' · ' + flowDef.trigger : ''}`;
+      els.flowSteps.innerHTML = '';
+      const steps = Array.isArray(flowDef.steps) ? flowDef.steps : [];
+      const executed = buildExecutedIndicesFromLogs(stepsLogs);
+      const gotoUsed = buildGotoUsageIndexes(flowDef, stepsLogs);
+      const hasLaterExec = (i) => Array.from(executed).some((n) => n > i);
+
+      steps.forEach((st, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'step';
+        const head = document.createElement('div');
+        head.style.display = 'flex'; head.style.alignItems = 'center'; head.style.marginBottom = '6px';
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        const type = st.ask ? 'ask' : (st.say ? 'say' : (st.wait ? 'wait' : (st.goto ? 'goto' : (st.label ? 'label' : (st.script ? 'script' : 'step')))));
+        badge.textContent = type.toUpperCase();
+        const idxEl = document.createElement('span');
+        idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
+        idxEl.textContent = '#' + (idx + 1);
+        head.appendChild(badge);
+        head.appendChild(idxEl);
+        wrap.appendChild(head);
+
+        if (st.ask != null) {
+          const field = document.createElement('div'); field.className = 'field';
+          const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
+          const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.addEventListener('input', (e) => { st.ask = e.target.value; });
+          field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
+          if (st.saveAs != null) {
+            const f2 = document.createElement('div'); f2.className = 'field';
+            const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
+            const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
+            f2.appendChild(l2); f2.appendChild(i2); wrap.appendChild(f2);
+          }
+        } else if (st.say != null) {
+          const field = document.createElement('div'); field.className = 'field';
+          const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
+          const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.addEventListener('input', (e) => { st.say = e.target.value; });
+          field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
+        } else {
+          const ro = document.createElement('div'); ro.className = 'field';
+          const l = document.createElement('div'); l.className = 'label'; l.textContent = 'details';
+          const v = document.createElement('div'); v.textContent = JSON.stringify(st);
+          ro.appendChild(l); ro.appendChild(v); wrap.appendChild(ro);
+        }
+
+        // Dimming logic
+        let dim = false;
+        if (st.goto) {
+          if (!gotoUsed.has(idx) && hasLaterExec(idx)) dim = true; // goto was skipped due to filters
+        }
+        if ((st.ask || st.say) && !executed.has(idx)) {
+          // step did not produce a message in logs → dim as unused
+          dim = true;
+        }
+        if (dim) wrap.classList.add('dimmed');
+
+        els.flowSteps.appendChild(wrap);
+      });
+    }
+
+    function formatTimeHM2(d) {
+      if (!d) return '';
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+
+    async function renderSingleInteraction(snap) {
+      els.viewList.style.display = 'none';
+      els.viewSingle.style.display = '';
+      const d = snap.data();
+      await loadFlowJson();
+      const flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
+      const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
+      if (flow) renderFlowWithDimming(d.flow_key, flow, stepsLogs);
+      els.btnOpenEditor.href = buildUrlWithAuth('editor', {});
+
+      // Right side: render messages and gotos
+      els.singleMessages.innerHTML = '';
+      const msgsWrap = document.createDocumentFragment();
+      const convMap = await fetchMessagesForRequestMap(d.chat_id, d.request_id).catch(() => new Map());
+      for (const s of stepsLogs) {
+        if (s.type === 'message') {
+          const line = document.createElement('div'); line.className = 'msg';
+          const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+          const meta = document.createElement('div'); meta.className = 'meta';
+          const msg = convMap.get(String(s.message_id));
+          meta.textContent = `${formatTimeHM2(when)} · ${s.from} · step #${s.step_index}`;
+          const body = document.createElement('div');
+          body.textContent = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${s.message_id})`;
+          line.appendChild(meta); line.appendChild(body); msgsWrap.appendChild(line);
+        } else if (s.type === 'goto') {
+          const line = document.createElement('div'); line.className = 'msg';
+          const when = s && s.at ? new Date(s.at) : null;
+          const meta = document.createElement('div'); meta.className = 'meta';
+          meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}`;
+          line.appendChild(meta); els.singleMessages.appendChild(line);
+        }
+      }
+      els.singleMessages.appendChild(msgsWrap);
+
+      // Publish button: download current flow.json (simple)
+      els.btnPublish.addEventListener('click', () => {
+        try {
+          if (!flowDoc) return;
+          const json = JSON.stringify(flowDoc, null, 2);
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'flow.json';
+          document.body.appendChild(a); a.click();
+          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+        } catch (_) {}
+      }, { once: true });
     }
 
     function renderRuns(docs, { prepend } = { prepend: false }) {
@@ -341,206 +485,6 @@
       }
     }
 
-    // -------- Single interaction combined view --------
-    let flowDoc = null; // loaded flow.json
-    function hasValidToken() {
-      try {
-        const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
-        return stored && stored.accessToken && Number.isFinite(stored.tokenExpiresAt) && Date.now() < stored.tokenExpiresAt - 5000;
-      } catch (_) { return false; }
-    }
-    function getGcsCfg() {
-      try { return JSON.parse(localStorage.getItem('gcs_config') || '{}'); } catch (_) { return {}; }
-    }
-    function gcsDownloadUrl(bucket, objectPath) {
-      return `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}?alt=media`;
-    }
-    function gcsUploadUrl(bucket, objectPath) {
-      return `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
-    }
-    async function loadFlowJsonPreferCloud() {
-      try {
-        const { bucket, object } = getGcsCfg();
-        const obj = object || 'flow.json';
-        if (bucket && hasValidToken()) {
-          const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
-          const res = await fetch(gcsDownloadUrl(bucket, obj), { headers: { Authorization: `Bearer ${stored.accessToken}` }, cache: 'no-store' });
-          if (res.ok) { flowDoc = await res.json(); return; }
-        }
-      } catch(_) {}
-      const res = await fetch('flow.json', { cache: 'no-store' });
-      flowDoc = res.ok ? await res.json() : { flows: {} };
-    }
-    async function publishFlowJsonToCloud() {
-      try {
-        if (!flowDoc) { alert('Nothing to publish'); return; }
-        const { bucket, object } = getGcsCfg();
-        const obj = object || 'flow.json';
-        if (!bucket) { alert('Configure Cloud Storage in editor first.'); return; }
-        const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
-        if (!stored.accessToken) { alert('Sign in via editor to get token.'); return; }
-        const body = JSON.stringify(flowDoc, null, 2);
-        const upMain = await fetch(gcsUploadUrl(bucket, obj), { method: 'POST', headers: { 'Authorization': `Bearer ${stored.accessToken}`, 'Content-Type': 'application/json' }, body });
-        if (!upMain.ok) throw new Error('Upload failed');
-        alert('Published.');
-      } catch (e) {
-        alert('Publish failed: ' + e.message);
-      }
-    }
-    function fieldText(labelText, value, onInput, singleLine = false) {
-      const wrap = document.createElement('div');
-      wrap.className = 'flow-field';
-      const label = document.createElement('div');
-      label.className = 'flow-label';
-      label.textContent = labelText;
-      let input;
-      if (singleLine) {
-        input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'flow-input';
-        input.value = value == null ? '' : String(value);
-      } else {
-        input = document.createElement('textarea');
-        input.className = 'flow-textarea';
-        input.value = value == null ? '' : String(value);
-      }
-      input.addEventListener('input', (e) => onInput(e.target.value));
-      wrap.appendChild(label); wrap.appendChild(input);
-      return wrap;
-    }
-    function computeLabelIndices(steps) {
-      const map = new Map();
-      steps.forEach((s, idx) => { if (s && typeof s.label === 'string') map.set(s.label, idx); });
-      return map;
-    }
-    function buildUsedInfo(run, steps) {
-      const msgs = (run.steps || []).filter((s) => s && s.type === 'message');
-      const executed = new Set();
-      msgs.forEach((m) => { if (Number.isFinite(m.step_index)) executed.add(m.step_index); });
-      const gotoLogs = new Set((run.steps || []).filter((s) => s && s.type === 'goto' && s.label).map((g) => String(g.label)));
-      const labelIdx = computeLabelIndices(steps);
-      const dim = new Set();
-      steps.forEach((st, i) => {
-        if (!st) return;
-        if (st.ask != null || st.say != null) {
-          if (!executed.has(i)) dim.add(i);
-        }
-        if (st.goto) {
-          const used = gotoLogs.has(String(st.goto));
-          if (used) {
-            const target = labelIdx.has(String(st.goto)) ? labelIdx.get(String(st.goto)) : null;
-            if (Number.isInteger(target)) {
-              for (let j = i + 1; j < target; j++) dim.add(j);
-            }
-          } else {
-            // if any message with step_index > i exists, assume goto skipped => dim the goto step itself
-            const hasHigher = Array.from(executed).some((idx) => idx > i);
-            if (hasHigher) dim.add(i);
-          }
-        }
-      });
-      return { dimmed: dim, executed, labelIdx };
-    }
-    function renderFlowColumn(flowKey, def, usedInfo) {
-      els.flowSteps.innerHTML = '';
-      els.flowTitle.textContent = `${flowKey}${def.trigger ? '  ·  ' + def.trigger : ''}`;
-      const steps = Array.isArray(def.steps) ? def.steps : [];
-      const stepEls = [];
-      steps.forEach((step, idx) => {
-        const s = document.createElement('div');
-        s.className = 'flow-step' + (usedInfo.dimmed.has(idx) ? ' dimmed' : '');
-        s.dataset.stepIndex = String(idx);
-        const head = document.createElement('div'); head.className = 'head';
-        const type = step.ask ? 'ask' : (step.say ? 'say' : (step.wait ? 'wait' : (step.script ? 'script' : (step.goto ? 'goto' : (step.label ? 'label' : 'step')))));
-        const badge = document.createElement('span'); badge.className = 'badge'; badge.textContent = type.toUpperCase();
-        const num = document.createElement('div'); num.style.color = '#94a3b8'; num.style.fontSize = '12px'; num.textContent = '#' + (idx + 1);
-        head.appendChild(badge); head.appendChild(num); s.appendChild(head);
-        if (step.ask != null || step.say != null) {
-          if (step.ask != null) s.appendChild(fieldText('ask', step.ask, (v) => { step.ask = v; }));
-          if (step.saveAs != null) s.appendChild(fieldText('saveAs', step.saveAs, (v) => { step.saveAs = v; }, true));
-          if (step.say != null) s.appendChild(fieldText('say', step.say, (v) => { step.say = v; }));
-        } else {
-          const details = document.createElement('div'); details.className = 'flow-field';
-          const lb = document.createElement('div'); lb.className = 'flow-label'; lb.textContent = 'Details';
-          const val = document.createElement('div'); val.textContent = JSON.stringify(step, null, 2);
-          details.appendChild(lb); details.appendChild(val); s.appendChild(details);
-        }
-        els.flowSteps.appendChild(s);
-        stepEls.push(s);
-      });
-      return stepEls;
-    }
-    function formatTimeHM(input) {
-      if (!input) return '';
-      const d = (input && typeof input.toDate === 'function') ? input.toDate() : (input instanceof Date ? input : new Date(input));
-      if (!Number.isFinite(d.getTime())) return '';
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      return `${hh}:${mm}`;
-    }
-    function renderAlignedMessages(run, stepEls, messagesMap) {
-      els.msgsLayer.innerHTML = '';
-      // Group messages by step_index
-      const byStep = new Map();
-      (run.steps || []).forEach((s) => {
-        if (s && s.type === 'message' && Number.isFinite(s.step_index)) {
-          const key = s.step_index;
-          if (!byStep.has(key)) byStep.set(key, []);
-          const msgDoc = messagesMap.get(String(s.message_id)) || null;
-          const time = formatTimeHM(msgDoc && msgDoc.date);
-          const fromLabel = s.from === 'user' ? 'User' : 'Bot';
-          const content = msgDoc && typeof msgDoc.contents === 'string' ? msgDoc.contents : '';
-          byStep.get(key).push({ time, from: fromLabel, content });
-        }
-      });
-      // Position each group near corresponding step element
-      const scrollEl = els.combinedScroll;
-      const flowStepsRoot = els.flowSteps;
-      stepEls.forEach((el, idx) => {
-        const items = byStep.get(idx) || [];
-        if (items.length === 0) return;
-        const group = document.createElement('div');
-        group.className = 'msg-group';
-        // compute top relative to msgsLayer
-        const top = el.getBoundingClientRect().top - flowStepsRoot.getBoundingClientRect().top + scrollEl.scrollTop;
-        group.style.top = `${Math.max(0, Math.floor(top))}px`;
-        items.forEach((it) => {
-          const b = document.createElement('div'); b.className = 'msg-bubble';
-          const m = document.createElement('div'); m.className = 'msg-meta'; m.textContent = `${it.time} ${it.from}`.trim();
-          const c = document.createElement('div'); c.textContent = it.content;
-          b.appendChild(m); b.appendChild(c); group.appendChild(b);
-        });
-        els.msgsLayer.appendChild(group);
-      });
-    }
-    async function buildCombinedView(runSnap) {
-      const run = runSnap.data();
-      // Hide default panels, show combined panel
-      document.querySelectorAll('.panel.left').forEach((el) => el.style.display = 'none');
-      // hide right list panel
-      els.list.closest('.panel').style.display = 'none';
-      els.combinedPanel.style.display = '';
-
-      await loadFlowJsonPreferCloud();
-      const def = (flowDoc && flowDoc.flows && flowDoc.flows[run.flow_key]) ? flowDoc.flows[run.flow_key] : null;
-      if (!def) {
-        els.flowTitle.textContent = run.flow_key || '(flow not found)';
-        els.flowSteps.innerHTML = '<div class="empty">Flow not found in flow.json</div>';
-        els.msgsLayer.innerHTML = '';
-        return;
-      }
-      const usedInfo = buildUsedInfo(run, def.steps || []);
-      const stepEls = renderFlowColumn(run.flow_key, def, usedInfo);
-      // fetch messages once
-      const map = await fetchMessagesForRequestMap(run.chat_id, run.request_id);
-      renderAlignedMessages(run, stepEls, map);
-      // reflow on resize/scroll
-      const reflow = () => renderAlignedMessages(run, stepEls, map);
-      els.combinedScroll.addEventListener('scroll', reflow);
-      window.addEventListener('resize', reflow);
-      if (els.btnPublish) els.btnPublish.onclick = publishFlowJsonToCloud;
-    }
-
     function buildRunsQuery({ requestId, userId, startDate, endDate }) {
       const col = collection(db, 'interactions');
       const constraints = [];
@@ -567,11 +511,12 @@
       const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
 
       if (requestId) {
-        // load a single doc view (combined)
+        // load a single doc view
         const docRef = doc(db, 'interactions', requestId);
         const snap = await getDoc(docRef);
         if (!snap.exists()) { renderEmpty(); return; }
-        await buildCombinedView(snap);
+        els.viewList.style.display = 'none';
+        await renderSingleInteraction(snap);
         return;
       }
 
@@ -581,6 +526,8 @@
       const docsDesc = snap.docs;
       paging.last = docsDesc[docsDesc.length - 1];
       const docsAsc = docsDesc.slice().reverse();
+      els.viewSingle.style.display = 'none';
+      els.viewList.style.display = '';
       renderRuns(docsAsc, { prepend: false });
     }
 
