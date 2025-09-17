@@ -429,9 +429,16 @@
 
     async function loadFlowJson() {
       try {
-        const res = await fetch('flow.json', { cache: 'no-store' });
-        if (!res.ok) throw new Error('Failed to load flow.json');
-        flowDoc = await res.json();
+        // Try from same origin (editor-compatible). If hosted elsewhere, ensure path correct.
+        const res = await fetch(buildUrlWithAuth('flow.json', {}), { cache: 'no-store' });
+        if (!res.ok) {
+          // fallback to relative path
+          const res2 = await fetch('flow.json', { cache: 'no-store' });
+          if (!res2.ok) throw new Error('Failed to load flow.json');
+          flowDoc = await res2.json();
+        } else {
+          flowDoc = await res.json();
+        }
       } catch (_) {
         flowDoc = { flows: {} };
       }
@@ -539,13 +546,16 @@
       els.singleMessages.innerHTML = '';
       // Messages
       const msgsWrap = document.createDocumentFragment();
+      const convMap = await fetchMessagesForRequestMap(d.chat_id, d.request_id).catch(() => new Map());
       for (const s of stepsLogs) {
         if (s.type === 'message') {
           const line = document.createElement('div'); line.className = 'msg';
           const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
           const meta = document.createElement('div'); meta.className = 'meta';
+          const msg = convMap.get(String(s.message_id));
           meta.textContent = `${formatTimeHM2(when)} · ${s.from} · step #${s.step_index}`;
-          const body = document.createElement('div'); body.textContent = `message_id=${s.message_id}`;
+          const body = document.createElement('div');
+          body.textContent = msg && typeof msg.contents === 'string' ? msg.contents : `(message_id=${s.message_id})`;
           line.appendChild(meta); line.appendChild(body); msgsWrap.appendChild(line);
         } else if (s.type === 'goto') {
           const line = document.createElement('div'); line.className = 'msg';
