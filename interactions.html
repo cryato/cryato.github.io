@@ -571,19 +571,6 @@
 
       els.flowSteps.appendChild(grid);
 
-      // Publish button: download current flow.json (simple)
-      els.btnPublish.addEventListener('click', () => {
-        try {
-          if (!flowDoc) return;
-          const json = JSON.stringify(flowDoc, null, 2);
-          const blob = new Blob([json], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'flow.json';
-          document.body.appendChild(a); a.click();
-          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
-        } catch (_) {}
-      }, { once: true });
 
       // Save to Cloud: upload current flow.json via OAuth token
       els.btnSaveCloud.addEventListener('click', async () => {
