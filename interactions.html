@@ -222,10 +222,18 @@
               line.textContent = `${time} ${fromLabel}: …`;
               line.dataset.msgId = String(s.message_id);
               line.dataset.from = fromLabel;
+            } else if (s.type === 'set_attributes') {
+              const when = s && s.at ? new Date(s.at) : null;
+              const time = formatTimeHM(when);
+              const updates = s.updates && typeof s.updates === 'object' ? s.updates : {};
+              const pairs = Object.entries(updates).map(([k, v]) => `${k} = ${String(v)}`);
+              line.textContent = `${time} set_attributes: ${pairs.join(', ')}`.trim();
             } else if (s.type === 'trigger') {
-              line.textContent = `trigger -> ${s.triggered_flow_key} child=<a href="${buildUrlWithAuth('interactions', { request_id: s.child_request_id})}">${s.child_request_id}</a>`;
+              line.textContent = `trigger -> ${s.triggered_flow_key} child=${s.child_request_id}`;
             } else if (s.type === 'goto') {
-              line.textContent = `goto -> ${s.label}`;
+              const when = s && s.at ? new Date(s.at) : null;
+              const time = formatTimeHM(when);
+              line.textContent = `${time} goto -> ${s.label}`.trim();
             } else {
               line.textContent = JSON.stringify(s);
             }
