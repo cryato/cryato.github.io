@@ -705,13 +705,13 @@
       const constraints = [];
       if (requestId) constraints.push(where('request_id', '==', requestId));
       if (userId) constraints.push(where('chat_id', '==', coerce(userId)));
-      // order by trigger time desc if filtering by date; otherwise order by request_id desc fallback
+      // order by trigger time desc and filter using Date objects (timestamp fields)
       constraints.push(orderBy('flow_trigger.triggered_at', 'desc'));
-      if (startDate) constraints.push(where('flow_trigger.triggered_at', '>=', startDate.toISOString()));
+      if (startDate) constraints.push(where('flow_trigger.triggered_at', '>=', startDate));
       if (endDate) {
         const end = new Date(endDate.getTime());
         end.setHours(23,59,59,999);
-        constraints.push(where('flow_trigger.triggered_at', '<=', end.toISOString()));
+        constraints.push(where('flow_trigger.triggered_at', '<=', end));
       }
       constraints.push(limit(paging.pageSize));
       if (paging.last) constraints.push(startAfter(paging.last));
