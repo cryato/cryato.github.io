@@ -453,6 +453,9 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       els.viewSingle.style.display = '';
       const d = snap.data();
       await loadSingleFlow(d.flow_key);
+      // Capture latest (current) flow's updated_at for comparison
+      let latestDef = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
+      const latestUpdatedAt = (latestDef && typeof latestDef.updated_at === 'string') ? latestDef.updated_at : '';
       // If a specific version is logged, try to load that backup first
       let flow = null;
       const desiredVersion = (d && typeof d.flow_version === 'string') ? d.flow_version : '';
@@ -558,7 +561,7 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       const rowTop = document.createElement('div'); rowTop.style.display = 'flex'; rowTop.style.alignItems = 'center'; rowTop.style.justifyContent = 'space-between';
       const leftMeta = document.createElement('div');
       const versionTs = (flow && typeof flow.updated_at === 'string') ? flow.updated_at : '';
-      const isCurrent = !(desiredVersion && desiredVersion.length > 0);
+      const isCurrent = (desiredVersion && desiredVersion.length > 0) ? (desiredVersion === latestUpdatedAt) : false;
       leftMeta.textContent = `${(versionTs || '').replace('T', ' ').replace('_', ':').replace('Z', ' UTC')}${isCurrent ? ' · current' : ''}`;
       const rightEdit = document.createElement('div');
       const descWrap = document.createElement('div'); descWrap.className = 'field'; descWrap.style.marginTop = '8px';
