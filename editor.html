@@ -274,6 +274,11 @@
     return m ? m[2] : '';
   }
 
+  function extractDescriptionFromName(name) {
+    // If we later include description in filename, parse here. For now, description isn't in name; return ''
+    return '';
+  }
+
   function formatDisplayFromTimestamp(ts) {
     // Input like 2025-09-18T12_15Z → display 2025-09-18 12:15 UTC
     if (!ts) return '';
@@ -292,12 +297,7 @@
     if (pageToken) params.set('pageToken', pageToken);
     const url = `${base}?${params.toString()}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
-    if (!res.ok) {
-      let body = '';
-      try { body = await res.text(); } catch (_) {}
-      const msg = `Failed to list backups (HTTP ${res.status} ${res.statusText || ''}) ${body}`.trim();
-      throw new Error(msg);
-    }
+    if (!res.ok) throw new Error('Failed to list backups');
     const json = await res.json();
     const items = Array.isArray(json.items) ? json.items : [];
     // Sort newest first by timestamp parsed from name
@@ -323,11 +323,11 @@
     try {
       const { items, nextPageToken } = await listBackupsForKey(currentFlowKey, '');
       renderCurrentVersionItem();
-      await renderVersionItems(items);
+      renderVersionItems(items);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
-      els.versionsHint.textContent = (e && e.message) ? e.message : 'Failed to list versions';
+      els.versionsHint.textContent = 'Failed to list versions';
     } finally {
       versionsPaging.busy = false;
     }
@@ -339,46 +339,28 @@
     versionsPaging.busy = true;
     try {
       const { items, nextPageToken } = await listBackupsForKey(versionsPaging.key, versionsPaging.nextPageToken);
-      await renderVersionItems(items);
+      renderVersionItems(items);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
-      els.versionsHint.textContent = (e && e.message) ? e.message : 'Failed to load more versions';
+      els.versionsHint.textContent = 'Failed to load more versions';
     } finally {
       versionsPaging.busy = false;
     }
   }
 
-  function renderCurrentVersionItem() {
-    const flows = (flowDoc && flowDoc.flows) || {};
-    const def = flows[currentFlowKey] || {};
-    const ts = typeof def.updated_at === 'string' ? def.updated_at : '';
-    const line = document.createElement('div');
-    line.className = 'step';
-    const row = document.createElement('div');
-    row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
-    const label = document.createElement('div');
-    const when = formatLocalFromUtcStamp(ts);
-    const desc = def.description ? ` — ${def.description}` : '';
-    label.textContent = `${when || '(unsaved)'} , Current${desc}`;
-    row.appendChild(label);
-    line.appendChild(row);
-    els.versionsList.appendChild(line);
-  }
-
-  async function renderVersionItems(items) {
+  function renderVersionItems(items) {
     const frag = document.createDocumentFragment();
-    for (const it of (items || [])) {
+    (items || []).forEach((it) => {
       const name = it && it.name ? String(it.name) : '';
-      const meta = await fetchBackupMeta(name);
+      const ts = extractTimestampFromBackupName(name);
       const line = document.createElement('div');
       line.className = 'step';
       const row = document.createElement('div');
       row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
       const label = document.createElement('div');
-      const when = formatLocalFromUtcStamp(meta.ts);
-      const desc = meta.description ? ` — ${meta.description}` : '';
-      label.textContent = `${when}${desc}`;
+      const desc = extractDescriptionFromName(name);
+      label.textContent = `${formatDisplayFromTimestamp(ts) || name}${desc ? ' — ' + desc : ''}`;
       const actions = document.createElement('div');
       const btnLoad = document.createElement('button'); btnLoad.className = 'btn'; btnLoad.textContent = 'Load';
       btnLoad.addEventListener('click', () => restoreVersionByName(name));
@@ -386,8 +368,25 @@
       row.appendChild(label); row.appendChild(actions);
       line.appendChild(row);
       frag.appendChild(line);
-    }
+    });
     els.versionsList.appendChild(frag);
+  }
+
+  function renderCurrentVersionItem() {
+    const flows = (flowDoc && flowDoc.flows) || {};
+    const def = flows[currentFlowKey] || {};
+    const ts = typeof def.updated_at === 'string' ? def.updated_at : '';
+    const desc = typeof def.description === 'string' ? def.description : '';
+    const line = document.createElement('div');
+    line.className = 'step';
+    const row = document.createElement('div');
+    row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
+    const label = document.createElement('div');
+    const when = formatDisplayFromTimestamp(ts);
+    label.textContent = `${when || '(unsaved)'}${desc ? ' — ' + desc : ''}, current`;
+    row.appendChild(label);
+    line.appendChild(row);
+    els.versionsList.appendChild(line);
   }
 
   async function restoreVersionByName(objectName) {
@@ -569,7 +568,7 @@
         await loadSingleFlow(sel);
       } else {
         flowDoc = { flows: {} };
-        currentFlowKey = null;
+      currentFlowKey = null;
       }
       renderFlows();
       renderSteps();
@@ -646,6 +645,10 @@
     head.appendChild(title);
     head.appendChild(desc);
     els.steps.appendChild(head);
+
+    // Editable flow description
+    const descField = fieldText('description', def.description || '', (v) => { def.description = v; });
+    els.steps.appendChild(descField);
 
     const steps = Array.isArray(def.steps) ? def.steps : [];
     steps.forEach((step, idx) => {
