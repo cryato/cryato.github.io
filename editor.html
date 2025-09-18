@@ -568,6 +568,7 @@
       }
       renderFlows();
       renderSteps();
+      bindVersionControlsIfNeeded();
     } catch (err) {
       console.error(err);
       flowDoc = { flows: {} };
@@ -851,6 +852,30 @@
   // If token already present, set Firebase cookies from bucket for other pages
   if (hasValidToken()) { ensureFirebaseCookiesFromBucket().catch(() => {}); }
   loadInitial();
+
+  function bindVersionControlsIfNeeded() {
+    try {
+      if (els.btnBrowseVersions && !els.btnBrowseVersions.dataset.boundVersions) {
+        els.btnBrowseVersions.dataset.boundVersions = '1';
+        els.btnBrowseVersions.addEventListener('click', async () => {
+          try {
+            ensureVersionsPanelVisible(true);
+            await loadVersionsFirstPage();
+          } catch (e) {
+            alert('Failed to open versions: ' + (e && e.message ? e.message : e));
+          }
+        });
+      }
+      if (els.btnLoadMoreVersions && !els.btnLoadMoreVersions.dataset.boundVersions) {
+        els.btnLoadMoreVersions.dataset.boundVersions = '1';
+        els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
+      }
+      if (els.btnCloseVersions && !els.btnCloseVersions.dataset.boundVersions) {
+        els.btnCloseVersions.dataset.boundVersions = '1';
+        els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
+      }
+    } catch (_) {}
+  }
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
