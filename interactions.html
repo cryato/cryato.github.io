@@ -483,7 +483,7 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
       const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
       // Ensure link goes to the editor with flow param
-      els.btnOpenEditor.href = buildUrlWithAuth('editor.html', { flow: d.flow_key });
+      els.btnOpenEditor.href = buildUrlWithAuth('editor', { flow: d.flow_key });
 
       // If flow not found, show a note
       if (!flow) {
@@ -672,6 +672,28 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
               body
             });
             const ok = res.ok;
+            // 3) Update versions file within flows prefix (flows/flow_versions.json)
+            if (ok) {
+              try {
+                const versionsPath = 'flows/flow_versions.json';
+                let map = {};
+                try {
+                  const resV = await fetch(gcsDownloadUrl(bucket, versionsPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+                  if (resV.ok) {
+                    const jsonV = await resV.json();
+                    map = (jsonV && (jsonV.versions || jsonV)) || {};
+                  }
+                } catch (_) {}
+                if (!map || typeof map !== 'object') map = {};
+                map[key] = newTimestampUtc;
+                const bodyV = JSON.stringify({ versions: map }, null, 2);
+                await fetch(gcsUploadUrl(bucket, versionsPath), {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: bodyV
+                });
+              } catch (_) {}
+            }
             btnPublish.textContent = ok ? 'Published ✓' : 'Publish failed';
             setTimeout(() => { btnPublish.textContent = prev; btnPublish.disabled = false; }, 1400);
           } catch (err) {

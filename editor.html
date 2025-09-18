@@ -826,6 +826,27 @@
         body: newBody
       });
       if (!upMain.ok) throw new Error('Upload failed');
+
+      // 3) Update versions file within flows prefix (flows/flow_versions.json)
+      try {
+        const versionsPath = 'flows/flow_versions.json';
+        let map = {};
+        try {
+          const resV = await fetch(gcsDownloadUrl(bucket, versionsPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+          if (resV.ok) {
+            const jsonV = await resV.json();
+            map = (jsonV && (jsonV.versions || jsonV)) || {};
+          }
+        } catch (_) {}
+        if (!map || typeof map !== 'object') map = {};
+        map[currentFlowKey] = newTimestampUtc;
+        const bodyV = JSON.stringify({ versions: map }, null, 2);
+        await fetch(gcsUploadUrl(bucket, versionsPath), {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: bodyV
+        });
+      } catch (_) {}
       alert('Saved to Cloud.');
     } catch (e) {
       console.error(e);
