@@ -292,7 +292,12 @@
     if (pageToken) params.set('pageToken', pageToken);
     const url = `${base}?${params.toString()}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to list backups');
+    if (!res.ok) {
+      let body = '';
+      try { body = await res.text(); } catch (_) {}
+      const msg = `Failed to list backups (HTTP ${res.status} ${res.statusText || ''}) ${body}`.trim();
+      throw new Error(msg);
+    }
     const json = await res.json();
     const items = Array.isArray(json.items) ? json.items : [];
     // Sort newest first by timestamp parsed from name
@@ -322,7 +327,7 @@
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
-      els.versionsHint.textContent = 'Failed to list versions';
+      els.versionsHint.textContent = (e && e.message) ? e.message : 'Failed to list versions';
     } finally {
       versionsPaging.busy = false;
     }
@@ -338,7 +343,7 @@
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
-      els.versionsHint.textContent = 'Failed to load more versions';
+      els.versionsHint.textContent = (e && e.message) ? e.message : 'Failed to load more versions';
     } finally {
       versionsPaging.busy = false;
     }
