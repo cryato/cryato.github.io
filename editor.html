@@ -581,17 +581,24 @@
     try {
       const token = oauth.accessToken;
       const mainPath = `flows/${currentFlowKey}.json`;
-      // 0) Prepare UTC timestamp and set into content before saving
-      const timestampUtc = formatUtcNowForFlow();
-      try { def.updated_at = timestampUtc; } catch (_) {}
-      // 1) Read current file; if present, back it up
+      // 1) Read current file; if present, back it up using its own updated_at
       let currentText = null;
+      let previousUpdatedAt = '';
       try {
         const getRes = await fetch(gcsDownloadUrl(bucket, mainPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
         if (getRes.ok) currentText = await getRes.text();
       } catch (_) {}
       if (currentText != null) {
-        const backupName = formatBackupName(currentFlowKey, timestampUtc);
+        try {
+          const json = JSON.parse(currentText);
+          let prevDef = null;
+          if (json && json.flows && json.flows[currentFlowKey]) prevDef = json.flows[currentFlowKey];
+          else if (json && json[currentFlowKey]) prevDef = json[currentFlowKey];
+          else prevDef = json;
+          if (prevDef && typeof prevDef.updated_at === 'string') previousUpdatedAt = prevDef.updated_at;
+        } catch (_) {}
+        const tsForBackup = previousUpdatedAt || formatUtcNowForFlow();
+        const backupName = formatBackupName(currentFlowKey, tsForBackup);
         const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -600,6 +607,8 @@
         if (!upBackup.ok) console.warn('Backup upload failed');
       }
       // 2) Upload new content (store as single-flow object)
+      const newTimestampUtc = formatUtcNowForFlow();
+      try { def.updated_at = newTimestampUtc; } catch (_) {}
       const newBody = JSON.stringify(def, null, 2);
       const upMain = await fetch(gcsUploadUrl(bucket, mainPath), {
         method: 'POST',

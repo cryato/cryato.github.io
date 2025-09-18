@@ -587,19 +587,25 @@
             const key = d.flow_key;
             const mainPath = `flows/${key}.json`;
 
-            // 0) Prepare UTC timestamp and set into content before saving
-            const timestampUtc = formatUtcNowForFlow();
-            try { flow.updated_at = timestampUtc; } catch (_) {}
-
-            // 1) Read current file and back it up if present
+            // 1) Read current file and back it up if present, using its own updated_at
             let currentText = null;
+            let previousUpdatedAt = '';
             try {
               const getRes = await fetch(gcsDownloadUrl(bucket, mainPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
               if (getRes.ok) currentText = await getRes.text();
             } catch (_) {}
             if (currentText != null) {
               try {
-                const backupName = formatBackupName(key, timestampUtc);
+                try {
+                  const json = JSON.parse(currentText);
+                  let prevDef = null;
+                  if (json && json.flows && json.flows[key]) prevDef = json.flows[key];
+                  else if (json && json[key]) prevDef = json[key];
+                  else prevDef = json;
+                  if (prevDef && typeof prevDef.updated_at === 'string') previousUpdatedAt = prevDef.updated_at;
+                } catch (_) {}
+                const tsForBackup = previousUpdatedAt || formatUtcNowForFlow();
+                const backupName = formatBackupName(key, tsForBackup);
                 const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
                   method: 'POST',
                   headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -611,6 +617,8 @@
 
             // 2) Upload new content (single-flow def)
             const url = gcsUploadUrl(bucket, mainPath);
+            const newTimestampUtc = formatUtcNowForFlow();
+            try { flow.updated_at = newTimestampUtc; } catch (_) {}
             const body = JSON.stringify(flow, null, 2);
             const res = await fetch(url, {
               method: 'POST',
