@@ -453,7 +453,31 @@
       els.viewSingle.style.display = '';
       const d = snap.data();
       await loadSingleFlow(d.flow_key);
-      const flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
+      // If a specific version is logged, try to load that backup first
+      let flow = null;
+      const desiredVersion = (d && typeof d.flow_version === 'string') ? d.flow_version : '';
+      if (desiredVersion) {
+        try {
+          const { bucket } = getCfg();
+          const key = d.flow_key;
+          if (bucket && key) {
+            const objectName = `flows/backups/${key}_${desiredVersion}.json`;
+            loadStoredTokenOnly();
+            if (hasValidToken()) {
+              const res = await fetch(gcsDownloadUrl(bucket, objectName), { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+              if (res.ok) {
+                const json = await res.json();
+                let def = null;
+                if (json && json.flows && json.flows[key]) def = json.flows[key]; else if (json && json[key]) def = json[key]; else def = json;
+                if (def && typeof def === 'object') {
+                  flowDoc = { flows: { [key]: def } };
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
       const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
       // Ensure link goes to the sibling editor.html
       els.btnOpenEditor.href = buildUrlWithAuth('editor.html', {});
