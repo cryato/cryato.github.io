@@ -106,15 +106,17 @@
   let currentFlowKey = null;
   let oauth = { clientId: '', accessToken: '', tokenExpiresAt: 0, scope: 'https://www.googleapis.com/auth/devstorage.read_write', tokenClient: null };
   let gsiLoaded = false;
+  let flowKeys = [];
+  let triggersMap = new Map(); // key -> trigger (best-effort)
 
-  // Load config from localStorage or URL params (client_id, bucket). Object defaults to flows/flow.json.
+  // Load config from localStorage or URL params (client_id, bucket).
   function loadConfig() {
     const url = new URL(window.location.href);
     const params = Object.fromEntries(url.searchParams.entries());
     const stored = JSON.parse(localStorage.getItem('gcs_config') || '{}');
     const clientId = params.client_id || stored.clientId || '';
     const bucket = params.bucket || stored.bucket || '';
-    const object = 'flows/flow.json';
+    const object = 'flows/'; // prefix for per-flow files
     oauth.clientId = clientId;
     // Persist silently so future loads work without showing fields
     localStorage.setItem('gcs_config', JSON.stringify({ clientId, bucket, object }));
@@ -202,10 +204,10 @@
     try {
       const stored = JSON.parse(localStorage.getItem('gcs_config') || '{}');
       const bucket = (stored.bucket || '').trim();
-      const object = 'flows/flow.json';
+      const object = 'flows/';
       return { bucket, object };
     } catch (_) {
-      return { bucket: '', object: 'flows/flow.json' };
+      return { bucket: '', object: 'flows/' };
     }
   }
 
@@ -217,11 +219,20 @@
     return `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
   }
 
-  function formatBackupName() {
+  function gcsListUrl(bucket, prefix) {
+    const base = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o`;
+    const params = new URLSearchParams();
+    params.set('prefix', prefix.replace(/^\/*/, ''));
+    params.set('fields', 'items(name),nextPageToken');
+    return `${base}?${params.toString()}`;
+  }
+
+  function formatBackupName(key) {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    const name = `flow${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}_${pad(now.getMinutes())}.json`;
-    return `flows/backups/${name}`;
+    const ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}_${pad(now.getMinutes())}`;
+    const safeKey = String(key || 'flow');
+    return `flows/backups/${safeKey}_${ts}.json`;
   }
 
   function setCookie(name, value, days) {
@@ -249,32 +260,144 @@
     } catch (_) {}
   }
 
-  async function loadFlowJson() {
+  async function listFlowKeysFromGcs() {
+    const { bucket } = getCfg();
+    const out = [];
+    if (!bucket || !hasValidToken()) return out;
     try {
-      // Prefer Cloud if configured and authenticated; fallback to local file
-      const { bucket, object } = getCfg();
-      if (bucket && object && hasValidToken()) {
-        const token = oauth.accessToken;
-        const url = gcsDownloadUrl(bucket, object);
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-        if (!res.ok) throw new Error('Failed to fetch from Cloud Storage');
+      let pageToken = '';
+      do {
+        const prefix = 'flows/';
+        const url = gcsListUrl(bucket, prefix) + (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+        if (!res.ok) break;
         const json = await res.json();
-        flowDoc = json;
-        currentFlowKey = null;
-        renderFlows();
-        renderSteps();
-        return;
-      }
+        const items = Array.isArray(json.items) ? json.items : [];
+        for (const it of items) {
+          const name = it && it.name ? String(it.name) : '';
+          if (!name.startsWith('flows/')) continue;
+          if (name.startsWith('flows/backups/')) continue;
+          if (!name.toLowerCase().endsWith('.json')) continue;
+          // skip legacy combined file
+          if (name === 'flows/flow.json') continue;
+          const m = name.match(/^flows\/(.+)\.json$/);
+          if (m) out.push(m[1]);
+        }
+        pageToken = json.nextPageToken || '';
+      } while (pageToken);
+    } catch (_) {}
+    return out;
+  }
+
+  async function listFlowKeysLocally() {
+    // Best-effort: read legacy combined file to derive keys
+    try {
       const res = await fetch('flows/flow.json', { cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to fetch flow.json');
+      if (!res.ok) return [];
       const json = await res.json();
-      flowDoc = json;
-      currentFlowKey = null;
+      if (json && json.flows && typeof json.flows === 'object') return Object.keys(json.flows);
+    } catch (_) {}
+    return [];
+  }
+
+  async function loadSingleFlow(key) {
+    // Prefer Cloud single file, fallback to site-local candidates, then legacy combined
+    const { bucket } = getCfg();
+    // Cloud
+    if (bucket && hasValidToken()) {
+      try {
+        const res = await fetch(gcsDownloadUrl(bucket, `flows/${key}.json`), { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          // Accept either {steps...} or { key: def } or {flows:{}}
+          let def = null;
+          if (json && json.flows && json.flows[key]) def = json.flows[key];
+          else if (json && json[key]) def = json[key];
+          else def = json;
+          flowDoc = { flows: { [key]: def || {} } };
+          currentFlowKey = key;
+          return true;
+        }
+      } catch (_) {}
+    }
+    // Local direct file candidates
+    const candidates = [
+      `flows/${key}.json`,
+      `../flows/${key}.json`,
+      `../../flows/${key}.json`,
+      `/flows/${key}.json`
+    ];
+    for (const rel of candidates) {
+      try {
+        const res = await fetch(rel, { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          let def = null;
+          if (json && json.flows && json.flows[key]) def = json.flows[key];
+          else if (json && json[key]) def = json[key];
+          else def = json;
+          flowDoc = { flows: { [key]: def || {} } };
+          currentFlowKey = key;
+          return true;
+        }
+      } catch (_) {}
+    }
+    // Fallback to legacy combined
+    try {
+      const res = await fetch('flows/flow.json', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        const def = json && json.flows ? json.flows[key] : null;
+        flowDoc = { flows: def ? { [key]: def } : {} };
+        currentFlowKey = def ? key : null;
+        return !!def;
+      }
+    } catch (_) {}
+    flowDoc = { flows: {} };
+    currentFlowKey = null;
+    return false;
+  }
+
+  async function loadInitial() {
+    try {
+      const u = new URL(location.href);
+      const sel = u.searchParams.get('flow') || '';
+      // Build list of keys
+      let keys = [];
+      if (hasValidToken()) keys = await listFlowKeysFromGcs();
+      if (!keys || keys.length === 0) keys = await listFlowKeysLocally();
+      flowKeys = Array.from(new Set(keys)).sort();
+      // Best-effort triggers map from legacy combined file
+      triggersMap = new Map();
+      try {
+        const { bucket } = getCfg();
+        let combined = null;
+        if (bucket && hasValidToken()) {
+          const r = await fetch(gcsDownloadUrl(bucket, 'flows/flow.json'), { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+          if (r.ok) combined = await r.json();
+        }
+        if (!combined) {
+          const r2 = await fetch('flows/flow.json', { cache: 'no-store' });
+          if (r2.ok) combined = await r2.json();
+        }
+        if (combined && combined.flows && typeof combined.flows === 'object') {
+          Object.entries(combined.flows).forEach(([k, v]) => {
+            if (v && typeof v === 'object' && v.trigger) triggersMap.set(k, String(v.trigger));
+          });
+        }
+      } catch (_) {}
+
+      // Load selected flow if any
+      if (sel) {
+        await loadSingleFlow(sel);
+      } else {
+        flowDoc = { flows: {} };
+        currentFlowKey = null;
+      }
       renderFlows();
       renderSteps();
     } catch (err) {
       console.error(err);
-      // alert('Could not load flow.json. Use Import JSON to load manually.');
       flowDoc = { flows: {} };
       renderFlows();
       renderSteps();
@@ -283,10 +406,11 @@
 
   function renderFlows() {
     const flows = (flowDoc && flowDoc.flows) || {};
-    const keys = Object.keys(flows);
+    const selected = currentFlowKey;
     els.flows.innerHTML = '';
+    const keys = flowKeys && flowKeys.length ? flowKeys : Object.keys(flows);
 
-    if (keys.length === 0) {
+    if (!keys || keys.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
       empty.textContent = 'No flows found.';
@@ -296,13 +420,9 @@
 
     keys.forEach((key) => {
       const def = flows[key] || {};
-      const item = document.createElement('div');
-      item.className = 'flow-item' + (currentFlowKey === key ? ' active' : '');
-      item.addEventListener('click', () => {
-        currentFlowKey = key;
-        renderFlows();
-        renderSteps();
-      });
+      const item = document.createElement('a');
+      item.href = `?flow=${encodeURIComponent(key)}`;
+      item.className = 'flow-item' + (selected === key ? ' active' : '');
 
       const icon = document.createElement('div');
       icon.innerHTML = '⚡️';
@@ -313,7 +433,8 @@
       k.textContent = key;
       const t = document.createElement('div');
       t.className = 'flow-trigger';
-      t.textContent = (def && def.trigger) ? def.trigger : '';
+      const trig = (def && def.trigger) ? def.trigger : (triggersMap.get(key) || '');
+      t.textContent = trig;
       meta.appendChild(k);
       meta.appendChild(t);
 
@@ -441,21 +562,24 @@
     }, 0);
   }
 
-  async function saveToCloudWithBackup() {
-    if (!flowDoc) return alert('Nothing to save.');
-    const { bucket, object } = getCfg();
-    if (!bucket || !object) return alert('Please configure Bucket and Object path.');
+  async function saveCurrentFlowToCloudWithBackup() {
+    if (!flowDoc || !currentFlowKey) return alert('Select a flow first.');
+    const def = (flowDoc.flows && flowDoc.flows[currentFlowKey]) || null;
+    if (!def) return alert('Nothing to save.');
+    const { bucket } = getCfg();
+    if (!bucket) return alert('Please configure Bucket.');
     if (!hasValidToken()) { alert('Please sign in first.'); return; }
     try {
       const token = oauth.accessToken;
-      // 1) Try to read current object; if present, back it up
+      const mainPath = `flows/${currentFlowKey}.json`;
+      // 1) Read current file; if present, back it up
       let currentText = null;
       try {
-        const getRes = await fetch(gcsDownloadUrl(bucket, object), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        const getRes = await fetch(gcsDownloadUrl(bucket, mainPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
         if (getRes.ok) currentText = await getRes.text();
       } catch (_) {}
       if (currentText != null) {
-        const backupName = formatBackupName();
+        const backupName = formatBackupName(currentFlowKey);
         const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -463,9 +587,9 @@
         });
         if (!upBackup.ok) console.warn('Backup upload failed');
       }
-      // 2) Upload new content
-      const newBody = JSON.stringify(flowDoc, null, 2);
-      const upMain = await fetch(gcsUploadUrl(bucket, object), {
+      // 2) Upload new content (store as single-flow object)
+      const newBody = JSON.stringify(def, null, 2);
+      const upMain = await fetch(gcsUploadUrl(bucket, mainPath), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: newBody
@@ -519,7 +643,7 @@
     if (file) handleImportFile(file);
     e.target.value = '';
   });
-  els.btnPublish.addEventListener('click', saveToCloudWithBackup);
+  els.btnPublish.addEventListener('click', saveCurrentFlowToCloudWithBackup);
   els.btnAuth.addEventListener('click', async () => {
     try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
   });
@@ -532,7 +656,7 @@
   loadStoredTokenOnly();
   // If token already present, set Firebase cookies from bucket for other pages
   if (hasValidToken()) { ensureFirebaseCookiesFromBucket().catch(() => {}); }
-  loadFlowJson();
+  loadInitial();
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
