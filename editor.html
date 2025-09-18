@@ -130,7 +130,7 @@
   let currentFlowKey = null;
   let oauth = { clientId: '', accessToken: '', tokenExpiresAt: 0, scope: 'https://www.googleapis.com/auth/devstorage.read_write', tokenClient: null };
   let gsiLoaded = false;
-  let versionsPaging = { nextPageToken: '', key: '', busy: false };
+  let versionsPaging = { key: '', names: [], index: 0, pageSize: 5, busy: false };
   let flowKeys = [];
   let triggersMap = new Map(); // key -> trigger (best-effort)
 
@@ -285,28 +285,35 @@
     return ts.replace('T', ' ').replace('_', ':').replace('Z', ' UTC');
   }
 
-  async function listBackupsForKey(key, pageToken) {
+  async function listAllBackupsForKey(key) {
     const { bucket } = getCfg();
     if (!bucket) throw new Error('Missing bucket');
     if (!hasValidToken()) throw new Error('Missing token');
     const base = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o`;
-    const params = new URLSearchParams();
-    params.set('prefix', `flows/backups/${key}_`);
-    params.set('fields', 'items(name),nextPageToken');
-    params.set('maxResults', '5');
-    if (pageToken) params.set('pageToken', pageToken);
-    const url = `${base}?${params.toString()}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to list backups');
-    const json = await res.json();
-    const items = Array.isArray(json.items) ? json.items : [];
+    let pageToken = '';
+    const names = [];
+    do {
+      const params = new URLSearchParams();
+      params.set('prefix', `flows/backups/${key}_`);
+      params.set('fields', 'items(name),nextPageToken');
+      if (pageToken) params.set('pageToken', pageToken);
+      const url = `${base}?${params.toString()}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to list backups');
+      const json = await res.json();
+      const items = Array.isArray(json.items) ? json.items : [];
+      for (const it of items) {
+        if (it && it.name) names.push(String(it.name));
+      }
+      pageToken = json.nextPageToken || '';
+    } while (pageToken);
     // Sort newest first by timestamp parsed from name
-    items.sort((a, b) => {
-      const ta = extractTimestampFromBackupName(a && a.name);
-      const tb = extractTimestampFromBackupName(b && b.name);
+    names.sort((a, b) => {
+      const ta = extractTimestampFromBackupName(a);
+      const tb = extractTimestampFromBackupName(b);
       return ta < tb ? 1 : (ta > tb ? -1 : 0);
     });
-    return { items, nextPageToken: json.nextPageToken || '' };
+    return names;
   }
 
   function ensureVersionsPanelVisible(show) {
@@ -317,15 +324,17 @@
   async function loadVersionsFirstPage() {
     if (!currentFlowKey) { alert('Select a flow first.'); return; }
     if (!hasValidToken()) { alert('Please sign in first.'); return; }
-    versionsPaging = { nextPageToken: '', key: currentFlowKey, busy: true };
+    versionsPaging = { key: currentFlowKey, names: [], index: 0, pageSize: 5, busy: true };
     els.versionsList.innerHTML = '';
     els.versionsHint.textContent = '';
     try {
-      const { items, nextPageToken } = await listBackupsForKey(currentFlowKey, '');
+      const names = await listAllBackupsForKey(currentFlowKey);
       renderCurrentVersionItem();
-      renderVersionItems(items);
-      versionsPaging.nextPageToken = nextPageToken;
-      els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
+      versionsPaging.names = names;
+      versionsPaging.index = 0;
+      renderVersionItems(names.slice(0, versionsPaging.pageSize));
+      const hasMore = names.length > versionsPaging.pageSize;
+      els.btnLoadMoreVersions.style.display = hasMore ? '' : 'none';
     } catch (e) {
       els.versionsHint.textContent = 'Failed to list versions';
     } finally {
@@ -335,14 +344,17 @@
 
   async function loadMoreVersions() {
     if (versionsPaging.busy) return;
-    if (!versionsPaging.nextPageToken) return;
+    const { names, index, pageSize } = versionsPaging;
+    const nextStart = index + pageSize;
+    if (!names || nextStart >= names.length) { els.btnLoadMoreVersions.style.display = 'none'; return; }
     versionsPaging.busy = true;
     try {
-      const { items, nextPageToken } = await listBackupsForKey(versionsPaging.key, versionsPaging.nextPageToken);
-      renderVersionItems(items);
-      versionsPaging.nextPageToken = nextPageToken;
-      els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
-    } catch (e) {
+      const slice = names.slice(nextStart, nextStart + pageSize);
+      renderVersionItems(slice);
+      versionsPaging.index = nextStart;
+      const hasMore = (nextStart + pageSize) < names.length;
+      els.btnLoadMoreVersions.style.display = hasMore ? '' : 'none';
+    } catch (_) {
       els.versionsHint.textContent = 'Failed to load more versions';
     } finally {
       versionsPaging.busy = false;
@@ -352,7 +364,7 @@
   function renderVersionItems(items) {
     const frag = document.createDocumentFragment();
     (items || []).forEach((it) => {
-      const name = it && it.name ? String(it.name) : '';
+      const name = String(it);
       const ts = extractTimestampFromBackupName(name);
       const line = document.createElement('div');
       line.className = 'step';
