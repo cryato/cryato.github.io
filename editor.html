@@ -359,8 +359,7 @@
       const row = document.createElement('div');
       row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
       const label = document.createElement('div');
-      const desc = extractDescriptionFromName(name);
-      label.textContent = `${formatDisplayFromTimestamp(ts) || name}${desc ? ' — ' + desc : ''}`;
+      label.textContent = `${formatDisplayFromTimestamp(ts) || name}`;
       const actions = document.createElement('div');
       const btnLoad = document.createElement('button'); btnLoad.className = 'btn'; btnLoad.textContent = 'Load';
       btnLoad.addEventListener('click', () => restoreVersionByName(name));
@@ -368,8 +367,36 @@
       row.appendChild(label); row.appendChild(actions);
       line.appendChild(row);
       frag.appendChild(line);
+
+      // Asynchronously fetch description for this backup and update the label
+      fetchBackupMeta(name).then((meta) => {
+        if (meta && typeof meta.description === 'string' && meta.description.length > 0) {
+          label.textContent = `${formatDisplayFromTimestamp(ts) || name} — ${meta.description}`;
+        }
+      }).catch(() => {});
     });
     els.versionsList.appendChild(frag);
+  }
+
+  async function fetchBackupMeta(objectName) {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket) return {};
+      if (!hasValidToken()) return {};
+      const res = await fetch(gcsDownloadUrl(bucket, objectName), { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+      if (!res.ok) return {};
+      const json = await res.json();
+      let def = null;
+      if (json && json.flows && currentFlowKey && json.flows[currentFlowKey]) def = json.flows[currentFlowKey];
+      else if (json && currentFlowKey && json[currentFlowKey]) def = json[currentFlowKey];
+      else def = json;
+      if (!def || typeof def !== 'object') return {};
+      const description = typeof def.description === 'string' ? def.description : '';
+      const updated_at = typeof def.updated_at === 'string' ? def.updated_at : '';
+      return { description, updated_at };
+    } catch (_) {
+      return {};
+    }
   }
 
   function renderCurrentVersionItem() {

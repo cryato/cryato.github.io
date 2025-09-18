@@ -619,6 +619,7 @@
             const url = gcsUploadUrl(bucket, mainPath);
             const newTimestampUtc = formatUtcNowForFlow();
             try { flow.updated_at = newTimestampUtc; } catch (_) {}
+            // Allow editing description before publish: if the left panel UI allowed edits, they are already in 'flow'
             const body = JSON.stringify(flow, null, 2);
             const res = await fetch(url, {
               method: 'POST',
