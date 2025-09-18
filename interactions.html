@@ -388,7 +388,7 @@
       return used;
     }
 
-    function buildStepLeftElement(st, idx, executed, gotoUsed) {
+function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       const wrap = document.createElement('div');
       wrap.className = 'step';
       const head = document.createElement('div');
@@ -407,18 +407,18 @@
       if (st.ask != null) {
         const field = document.createElement('div'); field.className = 'field';
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
-        const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.addEventListener('input', (e) => { st.ask = e.target.value; });
+  const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { st.ask = e.target.value; });
         field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
         if (st.saveAs != null) {
           const f2 = document.createElement('div'); f2.className = 'field';
           const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
-          const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
+  const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
           f2.appendChild(l2); f2.appendChild(i2); wrap.appendChild(f2);
         }
       } else if (st.say != null) {
         const field = document.createElement('div'); field.className = 'field';
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
-        const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.addEventListener('input', (e) => { st.say = e.target.value; });
+  const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { st.say = e.target.value; });
         field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
       } else {
         const ro = document.createElement('div'); ro.className = 'field';
@@ -479,8 +479,8 @@
       }
       flow = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
       const stepsLogs = Array.isArray(d.steps) ? d.steps : [];
-      // Ensure link goes to the sibling editor.html
-      els.btnOpenEditor.href = buildUrlWithAuth('editor.html', {});
+      // Ensure link goes to the editor with flow param
+      els.btnOpenEditor.href = buildUrlWithAuth('editor.html', { flow: d.flow_key });
 
       // If flow not found, show a note
       if (!flow) {
@@ -553,6 +553,22 @@
 
       // Build synced rows grid inside left panel
       els.flowSteps.innerHTML = '';
+      // Version header with description and date + ability to edit description
+      const header = document.createElement('div'); header.className = 'step';
+      const rowTop = document.createElement('div'); rowTop.style.display = 'flex'; rowTop.style.alignItems = 'center'; rowTop.style.justifyContent = 'space-between';
+      const leftMeta = document.createElement('div');
+      const versionTs = (flow && typeof flow.updated_at === 'string') ? flow.updated_at : '';
+      const isCurrent = !desiredVersion;
+      leftMeta.textContent = `${(versionTs || '').replace('T', ' ').replace('_', ':').replace('Z', ' UTC')}${isCurrent ? ' · current' : ''}`;
+      const rightEdit = document.createElement('div');
+      const descWrap = document.createElement('div'); descWrap.className = 'field'; descWrap.style.marginTop = '8px';
+      const descLabel = document.createElement('div'); descLabel.className = 'label'; descLabel.textContent = 'Description';
+      const descInput = document.createElement('input'); descInput.type = 'text'; descInput.value = String((flow && flow.description) || '');
+      descInput.addEventListener('input', (e) => { if (flow) flow.description = e.target.value; });
+      descWrap.appendChild(descLabel); descWrap.appendChild(descInput);
+      rowTop.appendChild(leftMeta); rowTop.appendChild(rightEdit);
+      header.appendChild(rowTop); header.appendChild(descWrap);
+      els.flowSteps.appendChild(header);
       const grid = document.createElement('div'); grid.className = 'steps-grid';
 
       const stepDefs = (flow && Array.isArray(flow.steps)) ? flow.steps : [];
@@ -578,7 +594,7 @@
       for (let i = 0; i < stepDefs.length; i++) {
         const st = stepDefs[i] || {};
         const leftCell = document.createElement('div'); leftCell.className = 'cell left';
-        leftCell.appendChild(buildStepLeftElement(st, i, executed, gotoUsed));
+        leftCell.appendChild(buildStepLeftElement(st, i, executed, gotoUsed, isCurrent));
 
         const rightCell = document.createElement('div'); rightCell.className = 'cell right';
         const entries = (groups.get(i) || []).slice().sort((a, b) => (getWhen(a) || 0) - (getWhen(b) || 0));
