@@ -536,6 +536,15 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
           const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
           meta.textContent = `${formatTimeHM2(when)} · GOTO → ${s.label}${idx}`;
           line.appendChild(meta);
+        } else if (s.type === 'version_switch') {
+          const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+          const a = document.createElement('a');
+          a.href = buildUrlWithAuth('interactions', { request_id: s.new_request_id });
+          a.textContent = s.new_request_id;
+          meta.textContent = `${formatTimeHM2(when)} · version_switch → `;
+          meta.appendChild(a);
+          const v = document.createElement('div'); v.textContent = `from ${s.from_version || '(?)'} to ${s.to_version || '(?)'}${idx}`;
+          line.appendChild(meta); line.appendChild(v);
         } else if (s.type === 'trigger') {
           const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
           meta.textContent = `${formatTimeHM2(when)} · trigger → ${s.triggered_flow_key} child=${s.child_request_id}${idx}`;
@@ -564,6 +573,14 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       const isCurrent = (desiredVersion && desiredVersion.length > 0) ? (desiredVersion === latestUpdatedAt) : false;
       leftMeta.textContent = `${(versionTs || '').replace('T', ' ').replace('_', ':').replace('Z', ' UTC')}${isCurrent ? ' · current' : ''}`;
       const rightEdit = document.createElement('div');
+      // If the new run references a previous interaction via trigger.previous_request_id, show link
+      if (stepsLogs && stepsLogs.length > 0) {
+        const firstTrig = stepsLogs.find((s) => s && s.type === 'trigger' && typeof s.previous_request_id === 'string' && s.previous_request_id);
+        if (firstTrig) {
+          const prev = document.createElement('a'); prev.className = 'btn'; prev.textContent = 'Previous interaction'; prev.href = buildUrlWithAuth('interactions', { request_id: firstTrig.previous_request_id });
+          rightEdit.appendChild(prev);
+        }
+      }
       const descWrap = document.createElement('div'); descWrap.className = 'field'; descWrap.style.marginTop = '8px';
       const descLabel = document.createElement('div'); descLabel.className = 'label'; descLabel.textContent = 'Description';
       const descInput = document.createElement('input'); descInput.type = 'text'; descInput.value = String((flow && flow.description) || ''); descInput.disabled = !isCurrent; if (isCurrent) descInput.addEventListener('input', (e) => { if (flow) flow.description = e.target.value; });
