@@ -52,6 +52,7 @@
       <a id="lnkConversations" class="btn" href="conversations">Conversations</a>
       <a id="lnkInteractions" class="btn" href="interactions">Interactions</a>
       <button id="btnSignOutHeader" class="btn">Sign out</button>
+      <button id="btnBrowseVersions" class="btn">Browse versions</button>
       <button id="btnPublish" class="btn accent">Publish</button>
     </div>
   </header>
@@ -66,6 +67,23 @@
       <div class="footer">
         <div class="hint">Variables must be written as <span class="code">{{variable}}</span>.</div>
         <div class="hint">Only <span class="code">ask</span> and <span class="code">say</span> are editable.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Versions panel -->
+  <div id="versionsPanel" class="panel" style="display:none; margin: 16px; padding: 12px;">
+    <div class="steps">
+      <div class="flow-header">
+        <div class="flow-title">Versions</div>
+        <div class="toolbar">
+          <button id="btnCloseVersions" class="btn">Close</button>
+        </div>
+      </div>
+      <div id="versionsList" class="steps"></div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+        <button id="btnLoadMoreVersions" class="btn">Load more</button>
+        <div id="versionsHint" class="hint"></div>
       </div>
     </div>
   </div>
@@ -94,18 +112,25 @@
     steps: document.getElementById('steps'),
     btnPublish: document.getElementById('btnPublish'),
     btnSignOutHeader: document.getElementById('btnSignOutHeader'),
+    btnBrowseVersions: document.getElementById('btnBrowseVersions'),
     fileInput: document.getElementById('fileInput'),
     // Cloud panel
     btnAuth: document.getElementById('btnAuth'),
     btnSignOut: document.getElementById('btnSignOut'),
     authStatus: document.getElementById('authStatus'),
     gcsPanel: document.getElementById('gcsPanel'),
+    versionsPanel: document.getElementById('versionsPanel'),
+    versionsList: document.getElementById('versionsList'),
+    btnLoadMoreVersions: document.getElementById('btnLoadMoreVersions'),
+    btnCloseVersions: document.getElementById('btnCloseVersions'),
+    versionsHint: document.getElementById('versionsHint'),
   };
 
   let flowDoc = null; // { flows: { key: def } }
   let currentFlowKey = null;
   let oauth = { clientId: '', accessToken: '', tokenExpiresAt: 0, scope: 'https://www.googleapis.com/auth/devstorage.read_write', tokenClient: null };
   let gsiLoaded = false;
+  let versionsPaging = { nextPageToken: '', key: '', busy: false };
   let flowKeys = [];
   let triggersMap = new Map(); // key -> trigger (best-effort)
 
@@ -242,6 +267,124 @@
     const safeKey = String(key || 'flow');
     const ts = String(timestampUtc || '');
     return `flows/backups/${safeKey}_${ts}.json`;
+  }
+
+  function extractTimestampFromBackupName(name) {
+    const m = String(name).match(/\/([^\/]+)_([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}Z)\.json$/);
+    return m ? m[2] : '';
+  }
+
+  function formatDisplayFromTimestamp(ts) {
+    // Input like 2025-09-18T12_15Z → display 2025-09-18 12:15 UTC
+    if (!ts) return '';
+    return ts.replace('T', ' ').replace('_', ':').replace('Z', ' UTC');
+  }
+
+  async function listBackupsForKey(key, pageToken) {
+    const { bucket } = getCfg();
+    if (!bucket) throw new Error('Missing bucket');
+    if (!hasValidToken()) throw new Error('Missing token');
+    const base = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o`;
+    const params = new URLSearchParams();
+    params.set('prefix', `flows/backups/${key}_`);
+    params.set('fields', 'items(name),nextPageToken');
+    params.set('maxResults', '5');
+    if (pageToken) params.set('pageToken', pageToken);
+    const url = `${base}?${params.toString()}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to list backups');
+    const json = await res.json();
+    const items = Array.isArray(json.items) ? json.items : [];
+    // Sort newest first by timestamp parsed from name
+    items.sort((a, b) => {
+      const ta = extractTimestampFromBackupName(a && a.name);
+      const tb = extractTimestampFromBackupName(b && b.name);
+      return ta < tb ? 1 : (ta > tb ? -1 : 0);
+    });
+    return { items, nextPageToken: json.nextPageToken || '' };
+  }
+
+  function ensureVersionsPanelVisible(show) {
+    if (!els.versionsPanel) return;
+    els.versionsPanel.style.display = show ? '' : 'none';
+  }
+
+  async function loadVersionsFirstPage() {
+    if (!currentFlowKey) { alert('Select a flow first.'); return; }
+    if (!hasValidToken()) { alert('Please sign in first.'); return; }
+    versionsPaging = { nextPageToken: '', key: currentFlowKey, busy: true };
+    els.versionsList.innerHTML = '';
+    els.versionsHint.textContent = '';
+    try {
+      const { items, nextPageToken } = await listBackupsForKey(currentFlowKey, '');
+      renderVersionItems(items);
+      versionsPaging.nextPageToken = nextPageToken;
+      els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
+    } catch (e) {
+      els.versionsHint.textContent = 'Failed to list versions';
+    } finally {
+      versionsPaging.busy = false;
+    }
+  }
+
+  async function loadMoreVersions() {
+    if (versionsPaging.busy) return;
+    if (!versionsPaging.nextPageToken) return;
+    versionsPaging.busy = true;
+    try {
+      const { items, nextPageToken } = await listBackupsForKey(versionsPaging.key, versionsPaging.nextPageToken);
+      renderVersionItems(items);
+      versionsPaging.nextPageToken = nextPageToken;
+      els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
+    } catch (e) {
+      els.versionsHint.textContent = 'Failed to load more versions';
+    } finally {
+      versionsPaging.busy = false;
+    }
+  }
+
+  function renderVersionItems(items) {
+    const frag = document.createDocumentFragment();
+    (items || []).forEach((it) => {
+      const name = it && it.name ? String(it.name) : '';
+      const ts = extractTimestampFromBackupName(name);
+      const line = document.createElement('div');
+      line.className = 'step';
+      const row = document.createElement('div');
+      row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
+      const label = document.createElement('div');
+      label.textContent = formatDisplayFromTimestamp(ts) || name;
+      const actions = document.createElement('div');
+      const btnLoad = document.createElement('button'); btnLoad.className = 'btn'; btnLoad.textContent = 'Load';
+      btnLoad.addEventListener('click', () => restoreVersionByName(name));
+      actions.appendChild(btnLoad);
+      row.appendChild(label); row.appendChild(actions);
+      line.appendChild(row);
+      frag.appendChild(line);
+    });
+    els.versionsList.appendChild(frag);
+  }
+
+  async function restoreVersionByName(objectName) {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket) { alert('Missing bucket'); return; }
+      if (!hasValidToken()) { alert('Please sign in first.'); return; }
+      const res = await fetch(gcsDownloadUrl(bucket, objectName), { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to download version');
+      const json = await res.json();
+      let def = null;
+      if (json && json.flows && json.flows[currentFlowKey]) def = json.flows[currentFlowKey];
+      else if (json && json[currentFlowKey]) def = json[currentFlowKey];
+      else def = json;
+      if (!def || typeof def !== 'object') throw new Error('Invalid version structure');
+      // Apply to editor state
+      if (!flowDoc || !flowDoc.flows) flowDoc = { flows: {} };
+      flowDoc.flows[currentFlowKey] = def;
+      renderSteps();
+    } catch (e) {
+      alert('Failed to load version: ' + e.message);
+    }
   }
 
   function setCookie(name, value, days) {
@@ -670,6 +813,12 @@
   });
   els.btnSignOut.addEventListener('click', signOut);
   if (els.btnSignOutHeader) els.btnSignOutHeader.addEventListener('click', signOut);
+  if (els.btnBrowseVersions) els.btnBrowseVersions.addEventListener('click', async () => {
+    ensureVersionsPanelVisible(true);
+    await loadVersionsFirstPage();
+  });
+  if (els.btnLoadMoreVersions) els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
+  if (els.btnCloseVersions) els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
 
   // Init
   loadConfig();
