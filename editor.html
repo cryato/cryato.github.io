@@ -306,39 +306,20 @@
 
   function ensureVersionsPanelVisible(show) {
     if (!els.versionsPanel) return;
-    try { els.versionsPanel.style.display = show ? '' : 'none'; } catch (_) {}
+    els.versionsPanel.style.display = show ? '' : 'none';
   }
 
   async function loadVersionsFirstPage() {
-    versionsPaging = { nextPageToken: '', key: currentFlowKey || '', busy: true };
+    if (!currentFlowKey) { alert('Select a flow first.'); return; }
+    if (!hasValidToken()) { alert('Please sign in first.'); return; }
+    versionsPaging = { nextPageToken: '', key: currentFlowKey, busy: true };
     els.versionsList.innerHTML = '';
     els.versionsHint.textContent = '';
-    els.btnLoadMoreVersions.style.display = 'none';
-    if (!currentFlowKey) {
-      els.versionsHint.textContent = 'Select a flow to browse its versions.';
-      versionsPaging.busy = false;
-      return;
-    }
-    const { bucket } = getCfg();
-    if (!bucket) {
-      els.versionsHint.textContent = 'Missing bucket. Configure Cloud access first.';
-      versionsPaging.busy = false;
-      return;
-    }
-    if (!hasValidToken()) {
-      els.versionsHint.textContent = 'Please sign in to list versions.';
-      versionsPaging.busy = false;
-      return;
-    }
     try {
       const { items, nextPageToken } = await listBackupsForKey(currentFlowKey, '');
-      renderVersionItems(items, true);
-      versionsPaging.key = currentFlowKey;
+      renderVersionItems(items);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
-      if (!items || items.length === 0) {
-        els.versionsHint.textContent = 'No versions yet.';
-      }
     } catch (e) {
       els.versionsHint.textContent = 'Failed to list versions';
     } finally {
@@ -352,7 +333,7 @@
     versionsPaging.busy = true;
     try {
       const { items, nextPageToken } = await listBackupsForKey(versionsPaging.key, versionsPaging.nextPageToken);
-      renderVersionItems(items, false);
+      renderVersionItems(items);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
@@ -362,7 +343,7 @@
     }
   }
 
-  function renderVersionItems(items, replace) {
+  function renderVersionItems(items) {
     const frag = document.createDocumentFragment();
     (items || []).forEach((it) => {
       const name = it && it.name ? String(it.name) : '';
@@ -381,7 +362,6 @@
       line.appendChild(row);
       frag.appendChild(line);
     });
-    if (replace) els.versionsList.innerHTML = '';
     els.versionsList.appendChild(frag);
   }
 
@@ -564,11 +544,10 @@
         await loadSingleFlow(sel);
       } else {
         flowDoc = { flows: {} };
-      currentFlowKey = null;
+        currentFlowKey = null;
       }
       renderFlows();
       renderSteps();
-      bindVersionControlsIfNeeded();
     } catch (err) {
       console.error(err);
       flowDoc = { flows: {} };
@@ -835,12 +814,8 @@
   els.btnSignOut.addEventListener('click', signOut);
   if (els.btnSignOutHeader) els.btnSignOutHeader.addEventListener('click', signOut);
   if (els.btnBrowseVersions) els.btnBrowseVersions.addEventListener('click', async () => {
-    try {
-      ensureVersionsPanelVisible(true);
-      await loadVersionsFirstPage();
-    } catch (e) {
-      alert('Failed to open versions: ' + (e && e.message ? e.message : e));
-    }
+    ensureVersionsPanelVisible(true);
+    await loadVersionsFirstPage();
   });
   if (els.btnLoadMoreVersions) els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
   if (els.btnCloseVersions) els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
@@ -852,30 +827,6 @@
   // If token already present, set Firebase cookies from bucket for other pages
   if (hasValidToken()) { ensureFirebaseCookiesFromBucket().catch(() => {}); }
   loadInitial();
-
-  function bindVersionControlsIfNeeded() {
-    try {
-      if (els.btnBrowseVersions && !els.btnBrowseVersions.dataset.boundVersions) {
-        els.btnBrowseVersions.dataset.boundVersions = '1';
-        els.btnBrowseVersions.addEventListener('click', async () => {
-          try {
-            ensureVersionsPanelVisible(true);
-            await loadVersionsFirstPage();
-          } catch (e) {
-            alert('Failed to open versions: ' + (e && e.message ? e.message : e));
-          }
-        });
-      }
-      if (els.btnLoadMoreVersions && !els.btnLoadMoreVersions.dataset.boundVersions) {
-        els.btnLoadMoreVersions.dataset.boundVersions = '1';
-        els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
-      }
-      if (els.btnCloseVersions && !els.btnCloseVersions.dataset.boundVersions) {
-        els.btnCloseVersions.dataset.boundVersions = '1';
-        els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
-      }
-    } catch (_) {}
-  }
   </script>
   <!-- Load Google Identity Services client library (deferred). No secrets embedded. -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
