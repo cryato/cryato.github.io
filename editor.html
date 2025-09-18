@@ -317,7 +317,8 @@
     els.versionsHint.textContent = '';
     try {
       const { items, nextPageToken } = await listBackupsForKey(currentFlowKey, '');
-      renderVersionItems(items);
+      renderCurrentVersionItem();
+      await renderVersionItems(items);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
@@ -333,7 +334,7 @@
     versionsPaging.busy = true;
     try {
       const { items, nextPageToken } = await listBackupsForKey(versionsPaging.key, versionsPaging.nextPageToken);
-      renderVersionItems(items);
+      await renderVersionItems(items);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
@@ -343,17 +344,36 @@
     }
   }
 
-  function renderVersionItems(items) {
+  function renderCurrentVersionItem() {
+    const flows = (flowDoc && flowDoc.flows) || {};
+    const def = flows[currentFlowKey] || {};
+    const ts = typeof def.updated_at === 'string' ? def.updated_at : '';
+    const line = document.createElement('div');
+    line.className = 'step';
+    const row = document.createElement('div');
+    row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
+    const label = document.createElement('div');
+    const when = formatLocalFromUtcStamp(ts);
+    const desc = def.description ? ` — ${def.description}` : '';
+    label.textContent = `${when || '(unsaved)'} , Current${desc}`;
+    row.appendChild(label);
+    line.appendChild(row);
+    els.versionsList.appendChild(line);
+  }
+
+  async function renderVersionItems(items) {
     const frag = document.createDocumentFragment();
-    (items || []).forEach((it) => {
+    for (const it of (items || [])) {
       const name = it && it.name ? String(it.name) : '';
-      const ts = extractTimestampFromBackupName(name);
+      const meta = await fetchBackupMeta(name);
       const line = document.createElement('div');
       line.className = 'step';
       const row = document.createElement('div');
       row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
       const label = document.createElement('div');
-      label.textContent = formatDisplayFromTimestamp(ts) || name;
+      const when = formatLocalFromUtcStamp(meta.ts);
+      const desc = meta.description ? ` — ${meta.description}` : '';
+      label.textContent = `${when}${desc}`;
       const actions = document.createElement('div');
       const btnLoad = document.createElement('button'); btnLoad.className = 'btn'; btnLoad.textContent = 'Load';
       btnLoad.addEventListener('click', () => restoreVersionByName(name));
@@ -361,7 +381,7 @@
       row.appendChild(label); row.appendChild(actions);
       line.appendChild(row);
       frag.appendChild(line);
-    });
+    }
     els.versionsList.appendChild(frag);
   }
 
