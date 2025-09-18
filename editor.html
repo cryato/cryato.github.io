@@ -788,6 +788,27 @@
     const { bucket } = getCfg();
     if (!bucket) return alert('Please configure Bucket.');
     if (!hasValidToken()) { alert('Please sign in first.'); return; }
+    // Ensure each step has a unique 8-char step_id before saving
+    try {
+      const existing = new Set();
+      function genId() {
+        const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let out = '';
+        for (let i = 0; i < 8; i++) out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+        return out;
+      }
+      if (def && Array.isArray(def.steps)) {
+        // collect existing ids first to avoid duplicates
+        def.steps.forEach((s) => { if (s && typeof s.step_id === 'string' && s.step_id.length > 0) existing.add(s.step_id); });
+        def.steps.forEach((s) => {
+          if (!s || (typeof s.step_id === 'string' && s.step_id.length > 0)) return;
+          let id = '';
+          do { id = genId(); } while (existing.has(id));
+          s.step_id = id;
+          existing.add(id);
+        });
+      }
+    } catch (_) {}
     try {
       const token = oauth.accessToken;
       const mainPath = `flows/${currentFlowKey}.json`;
