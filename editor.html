@@ -827,23 +827,33 @@
       });
       if (!upMain.ok) throw new Error('Upload failed');
 
-      // 3) Update versions file within flows prefix (flows/flow_versions.json)
+      // 3) Update versions file within flows prefix (flows/versions.txt)
       try {
-        const versionsPath = 'flows/flow_versions.json';
-        let map = {};
+        const versionsPath = 'flows/versions.txt';
+        // Read existing text if any
+        let existing = '';
         try {
           const resV = await fetch(gcsDownloadUrl(bucket, versionsPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-          if (resV.ok) {
-            const jsonV = await resV.json();
-            map = (jsonV && (jsonV.versions || jsonV)) || {};
-          }
+          if (resV.ok) existing = await resV.text();
         } catch (_) {}
-        if (!map || typeof map !== 'object') map = {};
+        // Convert to map, update, and serialize back to key=value lines
+        const map = {};
+        String(existing || '')
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'))
+          .forEach((line) => {
+            const idx = line.indexOf('=');
+            if (idx <= 0) return;
+            const k = line.slice(0, idx).trim();
+            const v = line.slice(idx + 1).trim();
+            if (k) map[k] = v;
+          });
         map[currentFlowKey] = newTimestampUtc;
-        const bodyV = JSON.stringify({ versions: map }, null, 2);
+        const bodyV = Object.entries(map).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
         await fetch(gcsUploadUrl(bucket, versionsPath), {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain; charset=utf-8' },
           body: bodyV
         });
       } catch (_) {}
