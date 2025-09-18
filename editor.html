@@ -227,11 +227,20 @@
     return `${base}?${params.toString()}`;
   }
 
-  function formatBackupName(key) {
-    const now = new Date();
+  function formatUtcNowForFlow() {
+    const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    const ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}_${pad(now.getMinutes())}`;
+    const yyyy = d.getUTCFullYear();
+    const mm = pad(d.getUTCMonth() + 1);
+    const dd = pad(d.getUTCDate());
+    const HH = pad(d.getUTCHours());
+    const MM = pad(d.getUTCMinutes());
+    return `${yyyy}-${mm}-${dd}T${HH}_${MM}Z`;
+  }
+
+  function formatBackupName(key, timestampUtc) {
     const safeKey = String(key || 'flow');
+    const ts = String(timestampUtc || '');
     return `flows/backups/${safeKey}_${ts}.json`;
   }
 
@@ -572,6 +581,9 @@
     try {
       const token = oauth.accessToken;
       const mainPath = `flows/${currentFlowKey}.json`;
+      // 0) Prepare UTC timestamp and set into content before saving
+      const timestampUtc = formatUtcNowForFlow();
+      try { def.updated_at = timestampUtc; } catch (_) {}
       // 1) Read current file; if present, back it up
       let currentText = null;
       try {
@@ -579,7 +591,7 @@
         if (getRes.ok) currentText = await getRes.text();
       } catch (_) {}
       if (currentText != null) {
-        const backupName = formatBackupName(currentFlowKey);
+        const backupName = formatBackupName(currentFlowKey, timestampUtc);
         const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
