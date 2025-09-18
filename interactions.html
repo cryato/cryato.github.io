@@ -259,6 +259,12 @@
       return `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
     }
 
+    function formatBackupName() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `flow${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}_${pad(now.getMinutes())}.json`;
+    }
+
     function loadStoredTokenOnly() {
       try {
         const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
@@ -546,7 +552,7 @@
 
       els.flowSteps.appendChild(grid);
 
-      // Publish button: upload current flow.json to Cloud using OAuth token
+      // Publish button: upload current flow.json to Cloud using OAuth token (with backup like editor.html)
       const btnPublish = document.getElementById('btnPublish');
       if (btnPublish && !btnPublish.dataset.boundPublish) {
         btnPublish.dataset.boundPublish = '1';
@@ -559,12 +565,33 @@
             if (!hasValidToken()) throw new Error('Missing or expired token');
             const { bucket, object } = getCfg();
             if (!bucket || !object) throw new Error('Missing bucket/object');
+            const token = oauth.accessToken;
+
+            // 1) Read current object text and back it up if present
+            let currentText = null;
+            try {
+              const getRes = await fetch(gcsDownloadUrl(bucket, object), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+              if (getRes.ok) currentText = await getRes.text();
+            } catch (_) {}
+            if (currentText != null) {
+              try {
+                const backupName = formatBackupName();
+                const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: currentText
+                });
+                if (!upBackup.ok) console.warn('Backup upload failed');
+              } catch (_) {}
+            }
+
+            // 2) Upload new content
             const url = gcsUploadUrl(bucket, object);
             const body = JSON.stringify(flowDoc || {}, null, 2);
             const res = await fetch(url, {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${oauth.accessToken}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json; charset=utf-8'
               },
               body
