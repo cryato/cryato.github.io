@@ -558,13 +558,12 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       const rowTop = document.createElement('div'); rowTop.style.display = 'flex'; rowTop.style.alignItems = 'center'; rowTop.style.justifyContent = 'space-between';
       const leftMeta = document.createElement('div');
       const versionTs = (flow && typeof flow.updated_at === 'string') ? flow.updated_at : '';
-      const isCurrent = !desiredVersion;
+      const isCurrent = !(desiredVersion && desiredVersion.length > 0);
       leftMeta.textContent = `${(versionTs || '').replace('T', ' ').replace('_', ':').replace('Z', ' UTC')}${isCurrent ? ' · current' : ''}`;
       const rightEdit = document.createElement('div');
       const descWrap = document.createElement('div'); descWrap.className = 'field'; descWrap.style.marginTop = '8px';
       const descLabel = document.createElement('div'); descLabel.className = 'label'; descLabel.textContent = 'Description';
-      const descInput = document.createElement('input'); descInput.type = 'text'; descInput.value = String((flow && flow.description) || '');
-      descInput.addEventListener('input', (e) => { if (flow) flow.description = e.target.value; });
+      const descInput = document.createElement('input'); descInput.type = 'text'; descInput.value = String((flow && flow.description) || ''); descInput.disabled = !isCurrent; if (isCurrent) descInput.addEventListener('input', (e) => { if (flow) flow.description = e.target.value; });
       descWrap.appendChild(descLabel); descWrap.appendChild(descInput);
       rowTop.appendChild(leftMeta); rowTop.appendChild(rightEdit);
       header.appendChild(rowTop); header.appendChild(descWrap);
