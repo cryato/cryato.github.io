@@ -306,20 +306,39 @@
 
   function ensureVersionsPanelVisible(show) {
     if (!els.versionsPanel) return;
-    els.versionsPanel.style.display = show ? '' : 'none';
+    try { els.versionsPanel.style.display = show ? '' : 'none'; } catch (_) {}
   }
 
   async function loadVersionsFirstPage() {
-    if (!currentFlowKey) { alert('Select a flow first.'); return; }
-    if (!hasValidToken()) { alert('Please sign in first.'); return; }
-    versionsPaging = { nextPageToken: '', key: currentFlowKey, busy: true };
+    versionsPaging = { nextPageToken: '', key: currentFlowKey || '', busy: true };
     els.versionsList.innerHTML = '';
     els.versionsHint.textContent = '';
+    els.btnLoadMoreVersions.style.display = 'none';
+    if (!currentFlowKey) {
+      els.versionsHint.textContent = 'Select a flow to browse its versions.';
+      versionsPaging.busy = false;
+      return;
+    }
+    const { bucket } = getCfg();
+    if (!bucket) {
+      els.versionsHint.textContent = 'Missing bucket. Configure Cloud access first.';
+      versionsPaging.busy = false;
+      return;
+    }
+    if (!hasValidToken()) {
+      els.versionsHint.textContent = 'Please sign in to list versions.';
+      versionsPaging.busy = false;
+      return;
+    }
     try {
       const { items, nextPageToken } = await listBackupsForKey(currentFlowKey, '');
-      renderVersionItems(items);
+      renderVersionItems(items, true);
+      versionsPaging.key = currentFlowKey;
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
+      if (!items || items.length === 0) {
+        els.versionsHint.textContent = 'No versions yet.';
+      }
     } catch (e) {
       els.versionsHint.textContent = 'Failed to list versions';
     } finally {
@@ -333,7 +352,7 @@
     versionsPaging.busy = true;
     try {
       const { items, nextPageToken } = await listBackupsForKey(versionsPaging.key, versionsPaging.nextPageToken);
-      renderVersionItems(items);
+      renderVersionItems(items, false);
       versionsPaging.nextPageToken = nextPageToken;
       els.btnLoadMoreVersions.style.display = nextPageToken ? '' : 'none';
     } catch (e) {
@@ -343,7 +362,7 @@
     }
   }
 
-  function renderVersionItems(items) {
+  function renderVersionItems(items, replace) {
     const frag = document.createDocumentFragment();
     (items || []).forEach((it) => {
       const name = it && it.name ? String(it.name) : '';
@@ -362,6 +381,7 @@
       line.appendChild(row);
       frag.appendChild(line);
     });
+    if (replace) els.versionsList.innerHTML = '';
     els.versionsList.appendChild(frag);
   }
 
@@ -544,7 +564,7 @@
         await loadSingleFlow(sel);
       } else {
         flowDoc = { flows: {} };
-        currentFlowKey = null;
+      currentFlowKey = null;
       }
       renderFlows();
       renderSteps();
@@ -814,8 +834,12 @@
   els.btnSignOut.addEventListener('click', signOut);
   if (els.btnSignOutHeader) els.btnSignOutHeader.addEventListener('click', signOut);
   if (els.btnBrowseVersions) els.btnBrowseVersions.addEventListener('click', async () => {
-    ensureVersionsPanelVisible(true);
-    await loadVersionsFirstPage();
+    try {
+      ensureVersionsPanelVisible(true);
+      await loadVersionsFirstPage();
+    } catch (e) {
+      alert('Failed to open versions: ' + (e && e.message ? e.message : e));
+    }
   });
   if (els.btnLoadMoreVersions) els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
   if (els.btnCloseVersions) els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
