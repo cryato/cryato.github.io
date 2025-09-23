@@ -400,8 +400,11 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       const idxEl = document.createElement('span');
       idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
       idxEl.textContent = '#' + (idx + 1);
+      const spacer = document.createElement('div'); spacer.style.flex = '1 1 auto';
       head.appendChild(badge);
       head.appendChild(idxEl);
+      head.appendChild(spacer);
+      head.appendChild(buildFiltersEditor(st, editable));
       wrap.appendChild(head);
 
       if (st.ask != null) {
@@ -438,6 +441,85 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
         dim = true;
       }
       if (dim) wrap.classList.add('dimmed');
+      return wrap;
+    }
+
+    // ---- Filters editor helpers ----
+    function parseFiltersModel(filters) {
+      if (filters == null) return { kind: 'none', items: [] };
+      const t = typeof filters;
+      if (t === 'string') return { kind: 'single', items: [ String(filters) ] };
+      if (Array.isArray(filters)) return { kind: 'or', items: filters.map((x) => String(x)) };
+      if (t === 'object' && filters) {
+        const andArr = Array.isArray(filters.and) ? filters.and.map((x) => String(x)) : [];
+        return { kind: 'and', items: andArr };
+      }
+      return { kind: 'none', items: [] };
+    }
+
+    function serializeFiltersModel(model) {
+      if (!model || !Array.isArray(model.items) || model.items.length === 0) return undefined;
+      if (model.kind === 'single') return model.items[0] || '';
+      if (model.kind === 'or') return model.items.slice();
+      if (model.kind === 'and') return { and: model.items.slice() };
+      if (model.items.length === 1) return model.items[0];
+      return model.items.slice();
+    }
+
+    function buildFiltersEditor(step, editable) {
+      const wrap = document.createElement('div');
+      wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.flexWrap = 'wrap'; wrap.style.gap = '6px';
+
+      const model = parseFiltersModel(step.filters);
+
+      const mode = document.createElement('select');
+      ;['single','or','and'].forEach((k) => { const opt = document.createElement('option'); opt.value = k; opt.textContent = k.toUpperCase(); mode.appendChild(opt); });
+      mode.value = (model.kind === 'none') ? 'single' : model.kind;
+      mode.disabled = !editable;
+      mode.style.background = 'rgba(17,24,39,0.6)'; mode.style.border = '1px solid #1f2937'; mode.style.color = '#e5e7eb'; mode.style.borderRadius = '8px'; mode.style.padding = '4px 6px';
+
+      const chips = document.createElement('div'); chips.style.display = 'flex'; chips.style.flexWrap = 'wrap'; chips.style.gap = '6px';
+      const addBtn = document.createElement('button'); addBtn.className = 'btn'; addBtn.textContent = 'Add filter'; addBtn.disabled = !editable;
+
+      function updateFromModel() {
+        if (mode.value === 'single' && model.items.length > 1) mode.value = 'or';
+        model.kind = mode.value;
+        step.filters = serializeFiltersModel(model);
+      }
+      function renderChips() {
+        chips.innerHTML = '';
+        model.items.forEach((txt, i) => {
+          const chip = document.createElement('span');
+          chip.style.fontSize = '11px'; chip.style.padding = '3px 6px'; chip.style.borderRadius = '999px';
+          chip.style.border = '1px solid #1f2937'; chip.style.background = 'rgba(15,23,42,0.6)'; chip.style.color = '#b3e1ff';
+          chip.textContent = txt;
+          if (editable) {
+            chip.style.cursor = 'pointer'; chip.title = 'Click to edit. Shift+Click to remove';
+            chip.addEventListener('click', (e) => {
+              if (e.shiftKey) { model.items.splice(i, 1); updateFromModel(); renderChips(); return; }
+              const v = prompt('Edit filter (variables must be like {{var}}):', txt);
+              if (v == null) return; const nv = String(v).trim();
+              if (nv.length === 0) { model.items.splice(i, 1); } else { model.items[i] = nv; }
+              updateFromModel(); renderChips();
+            });
+          }
+          chips.appendChild(chip);
+        });
+      }
+      mode.addEventListener('change', () => {
+        if (mode.value === 'single' && model.items.length > 1) model.items = model.items.length ? [ model.items[0] ] : [];
+        updateFromModel(); renderChips();
+      });
+      addBtn.addEventListener('click', () => {
+        const v = prompt('Add filter (e.g., {{age}} > 18):', '');
+        if (v == null) return; const nv = String(v).trim(); if (!nv) return;
+        if (model.kind === 'none') model.kind = 'single';
+        if (model.kind === 'single' && model.items.length >= 1) { model.kind = mode.value || 'or'; }
+        model.items.push(nv); updateFromModel(); renderChips();
+      });
+
+      renderChips();
+      wrap.appendChild(mode); wrap.appendChild(chips); wrap.appendChild(addBtn);
       return wrap;
     }
 
