@@ -578,11 +578,13 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       return `${hh}:${mm}`;
     }
 
-    async function renderSingleInteraction(snap) {
+    async function renderSingleInteraction(snap, opts = {}) {
       els.viewList.style.display = 'none';
       els.viewSingle.style.display = '';
       const d = snap.data();
-      await loadSingleFlow(d.flow_key);
+      if (!opts.reuseLoaded) {
+        await loadSingleFlow(d.flow_key);
+      }
       // Apply in-memory overrides (e.g., added steps) if any
       if (flowOverrides.has(d.flow_key)) {
         const defOverride = flowOverrides.get(d.flow_key);
@@ -746,7 +748,7 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
 
       // Optional: plus button before first step (only when editing current)
       if (isCurrent) {
-        const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, 0, () => renderSingleInteraction(snap)));
+        const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, 0, () => renderSingleInteraction(snap, { reuseLoaded: true })));
         const spacerRight = document.createElement('div'); spacerRight.className = 'cell right';
         grid.appendChild(plusLeft); grid.appendChild(spacerRight);
       }
@@ -770,7 +772,7 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
 
         // Insert plus between steps when editing current version
         if (isCurrent) {
-          const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, i + 1, () => renderSingleInteraction(snap)));
+          const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, i + 1, () => renderSingleInteraction(snap, { reuseLoaded: true })));
           const spacerRight = document.createElement('div'); spacerRight.className = 'cell right';
           grid.appendChild(plusLeft); grid.appendChild(spacerRight);
         }
