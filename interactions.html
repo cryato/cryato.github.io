@@ -240,6 +240,7 @@
 
     // ---------- Flow Single View Helpers ----------
     let flowDoc = null;
+    const flowOverrides = new Map(); // key -> def (in-memory edits)
 
     function getCfg() {
       try {
@@ -582,6 +583,11 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       els.viewSingle.style.display = '';
       const d = snap.data();
       await loadSingleFlow(d.flow_key);
+      // Apply in-memory overrides (e.g., added steps) if any
+      if (flowOverrides.has(d.flow_key)) {
+        const defOverride = flowOverrides.get(d.flow_key);
+        if (flowDoc && flowDoc.flows) flowDoc.flows[d.flow_key] = defOverride;
+      }
       // Capture latest (current) flow's updated_at for comparison
       let latestDef = flowDoc && flowDoc.flows ? flowDoc.flows[d.flow_key] : null;
       const latestUpdatedAt = (latestDef && typeof latestDef.updated_at === 'string') ? latestDef.updated_at : '';
@@ -740,7 +746,7 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
 
       // Optional: plus button before first step (only when editing current)
       if (isCurrent) {
-        const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, 0));
+        const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, 0, () => renderSingleInteraction(snap)));
         const spacerRight = document.createElement('div'); spacerRight.className = 'cell right';
         grid.appendChild(plusLeft); grid.appendChild(spacerRight);
       }
@@ -764,7 +770,7 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
 
         // Insert plus between steps when editing current version
         if (isCurrent) {
-          const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, i + 1));
+          const plusLeft = document.createElement('div'); plusLeft.className = 'cell left'; plusLeft.appendChild(buildInsertBetweenRow(flow, i + 1, () => renderSingleInteraction(snap)));
           const spacerRight = document.createElement('div'); spacerRight.className = 'cell right';
           grid.appendChild(plusLeft); grid.appendChild(spacerRight);
         }
@@ -895,16 +901,16 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
     }
 
     // ---- Add Step (+) UI for single interaction view ----
-    function buildInsertBetweenRow(flowDef, insertIndex) {
+    function buildInsertBetweenRow(flowDef, insertIndex, onInserted) {
       const row = document.createElement('div'); row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'center'; row.style.margin = '6px 0';
       const lineL = document.createElement('div'); lineL.style.flex = '1'; lineL.style.height = '1px'; lineL.style.background = '#1f2937';
       const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = '+'; btn.title = 'Add step here'; btn.style.width = '32px'; btn.style.height = '28px'; btn.style.padding = '0';
-      btn.addEventListener('click', () => openAddStepModal(flowDef, insertIndex));
+      btn.addEventListener('click', () => openAddStepModal(flowDef, insertIndex, onInserted));
       const lineR = document.createElement('div'); lineR.style.flex = '1'; lineR.style.height = '1px'; lineR.style.background = '#1f2937';
       row.appendChild(lineL); row.appendChild(btn); row.appendChild(lineR); return row;
     }
 
-    function openAddStepModal(flowDef, insertIndex) {
+    function openAddStepModal(flowDef, insertIndex, onInserted) {
       const overlay = document.createElement('div'); overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '1000';
       const dialog = document.createElement('div'); dialog.className = 'panel'; dialog.style.position = 'absolute'; dialog.style.top = '10%'; dialog.style.left = '50%'; dialog.style.transform = 'translateX(-50%)'; dialog.style.width = 'min(860px, 92vw)'; dialog.style.maxHeight = '80vh'; dialog.style.overflow = 'auto'; dialog.style.padding = '12px';
       const header = document.createElement('div'); header.className = 'flow-header';
@@ -968,9 +974,18 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
         else if (t === 'script') { const inputs = formWrap.querySelectorAll('input'); const file = inputs[0]; const timeout = inputs[1]; const spec = { file: String((file && file.value) || '') }; const n = Number(timeout && timeout.value); if (Number.isFinite(n) && n > 0) spec.timeoutMs = n; step.script = spec; }
         if (!flowDef || !Array.isArray(flowDef.steps)) flowDef.steps = [];
         const pos = Math.max(0, Math.min(insertIndex, flowDef.steps.length)); flowDef.steps.splice(pos, 0, step);
+        // Persist override for this key so future reloads keep edits until published
+        if (flow && flow.updated_at != null) {
+          // flowDef is the same object as flow; set override by current flow key
+          // In this scope, we can derive key from latest loaded flow by scanning flowDoc
+          try {
+            const entry = Array.from(Object.entries(flowDoc && flowDoc.flows || {})).find(([, v]) => v === flowDef);
+            const key = entry ? entry[0] : '';
+            if (key) flowOverrides.set(key, flowDef);
+          } catch (_) {}
+        }
         overlay.remove();
-        // Re-render single view
-        renderSingleInteraction({ data: () => ({ ...d, flow_key: d.flow_key, steps: stepsLogs }) });
+        if (typeof onInserted === 'function') onInserted();
       });
       dialog.appendChild(header); dialog.appendChild(body); body.appendChild(typeField); body.appendChild(formWrap); dialog.appendChild(footer); overlay.appendChild(dialog); document.body.appendChild(overlay);
       btnClose.addEventListener('click', () => overlay.remove());
