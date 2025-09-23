@@ -1128,6 +1128,36 @@
     menu.style.borderRadius = '10px';
 
     const count = selectedSteps.size || 0;
+
+    // Copy JSON of selected steps
+    if (count > 0) {
+      const btnCopy = document.createElement('button');
+      btnCopy.className = 'btn';
+      btnCopy.textContent = count > 1 ? `Copy JSON (${count})` : 'Copy JSON';
+      btnCopy.style.width = '100%';
+      btnCopy.style.marginBottom = '6px';
+      btnCopy.addEventListener('click', async () => {
+        try {
+          const steps = Array.isArray(def.steps) ? def.steps : [];
+          const indices = [];
+          steps.forEach((st, i) => { if (selectedSteps.has(st)) indices.push(i); });
+          indices.sort((a, b) => a - b);
+          const payload = indices.map((i) => steps[i]);
+          const text = JSON.stringify(payload.length === 1 ? payload[0] : payload, null, 2);
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            ta.remove();
+          }
+          try { alert(`Copied ${payload.length} step${payload.length === 1 ? '' : 's'} to clipboard.`); } catch (_) {}
+        } catch (_) {}
+        closeContextMenu();
+      });
+      menu.appendChild(btnCopy);
+    }
     const btnDup = document.createElement('button');
     btnDup.className = 'btn';
     btnDup.textContent = count > 1 ? `Duplicate selected (${count})` : 'Duplicate selected';
@@ -1275,7 +1305,8 @@
       { v: 'sheets_add_row', n: 'Sheets: add row' },
       { v: 'sheets_find_row', n: 'Sheets: find row' },
       { v: 'sheets_get_row', n: 'Sheets: get row' },
-      { v: 'script', n: 'Run script' }
+      { v: 'script', n: 'Run script' },
+      { v: 'from_json', n: 'From JSON' }
     ];
     types.forEach((t) => { const o = document.createElement('option'); o.value = t.v; o.textContent = t.n; typeSel.appendChild(o); });
     typeField.appendChild(typeLabel); typeField.appendChild(typeSel);
@@ -1349,6 +1380,11 @@
         const timeout = document.createElement('input'); timeout.type = 'number'; timeout.placeholder = 'timeoutMs (optional)'; timeout.min = '0';
         formWrap.appendChild(field('file', file));
         formWrap.appendChild(field('timeoutMs', timeout));
+      } else if (t === 'from_json') {
+        const ta = document.createElement('textarea');
+        ta.placeholder = 'Paste a step object or an array of steps JSON';
+        ta.style.minHeight = '160px';
+        formWrap.appendChild(field('JSON', ta));
       }
     }
 
@@ -1421,6 +1457,50 @@
         const n = Number(timeout && timeout.value);
         if (Number.isFinite(n) && n > 0) spec.timeoutMs = n;
         step.script = spec;
+      } else if (t === 'from_json') {
+        const ta = formWrap.querySelector('textarea');
+        const txt = String((ta && ta.value) || '').trim();
+        if (!txt) { alert('Paste JSON first.'); return; }
+        let parsed = null;
+        try { parsed = JSON.parse(txt); } catch (e) { alert('Invalid JSON: ' + e.message); return; }
+        let stepsToInsert = [];
+        if (Array.isArray(parsed)) stepsToInsert = parsed;
+        else if (parsed && typeof parsed === 'object') stepsToInsert = [parsed];
+        else { alert('JSON must be an object or an array of objects.'); return; }
+        if (!Array.isArray(def.steps)) def.steps = [];
+        // Build existing id set
+        const existingIds = new Set();
+        def.steps.forEach((s) => { if (s && typeof s.step_id === 'string' && s.step_id) existingIds.add(s.step_id); });
+        function genId() {
+          const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+          let out = '';
+          for (let i = 0; i < 8; i++) out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+          return out;
+        }
+        // Normalize and ensure unique step_id on incoming steps
+        const normalized = stepsToInsert.map((s) => {
+          const clone = JSON.parse(JSON.stringify(s || {}));
+          if (!clone || typeof clone !== 'object') return {};
+          if (typeof clone.step_id === 'string' && clone.step_id) {
+            if (existingIds.has(clone.step_id)) {
+              let id = '';
+              do { id = genId(); } while (existingIds.has(id));
+              clone.step_id = id;
+            }
+            existingIds.add(clone.step_id);
+          } else {
+            let id = '';
+            do { id = genId(); } while (existingIds.has(id));
+            clone.step_id = id;
+            existingIds.add(id);
+          }
+          return clone;
+        });
+        const pos = Math.max(0, Math.min(insertIndex, def.steps.length));
+        def.steps.splice(pos, 0, ...normalized);
+        overlay.remove();
+        renderSteps();
+        return;
       }
 
       if (!Array.isArray(def.steps)) def.steps = [];
