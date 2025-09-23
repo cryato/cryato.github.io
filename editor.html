@@ -773,131 +773,196 @@
     return wrap;
   }
 
-  // ---- Filters editor helpers ----
-  function parseFiltersModel(filters) {
-    if (filters == null) return { kind: 'none', items: [] };
+  // ---- Nested filters: parser, serializer, summary, and modal editor ----
+  function filtersToNode(filters) {
+    if (filters == null) return null;
     const t = typeof filters;
-    if (t === 'string') return { kind: 'single', items: [ String(filters) ] };
-    if (Array.isArray(filters)) return { kind: 'or', items: filters.map((x) => String(x)) };
-    if (t === 'object' && filters) {
-      const andArr = Array.isArray(filters.and) ? filters.and.map((x) => String(x)) : [];
-      return { kind: 'and', items: andArr };
+    if (t === 'string') return { type: 'cond', text: String(filters) };
+    if (Array.isArray(filters)) {
+      const children = filters.map((f) => filtersToNode(f)).filter(Boolean);
+      return { type: 'group', op: 'OR', children };
     }
-    return { kind: 'none', items: [] };
+    if (t === 'object') {
+      const andArr = Array.isArray(filters.and) ? filters.and : [];
+      const children = andArr.map((f) => filtersToNode(f)).filter(Boolean);
+      return { type: 'group', op: 'AND', children };
+    }
+    return null;
   }
 
-  function serializeFiltersModel(model) {
-    if (!model || !Array.isArray(model.items) || model.items.length === 0) return undefined;
-    if (model.kind === 'single') return model.items[0] || '';
-    if (model.kind === 'or') return model.items.slice();
-    if (model.kind === 'and') return { and: model.items.slice() };
-    // Fallbacks
-    if (model.items.length === 1) return model.items[0];
-    return model.items.slice();
+  function normalizeNode(node) {
+    if (!node) return null;
+    if (node.type === 'cond') {
+      const txt = String(node.text || '').trim();
+      return txt ? { type: 'cond', text: txt } : null;
+    }
+    if (node.type === 'group') {
+      const op = node.op === 'AND' ? 'AND' : 'OR';
+      const children = (node.children || []).map(normalizeNode).filter(Boolean);
+      // flatten nested same-op groups
+      const flat = [];
+      children.forEach((c) => {
+        if (c && c.type === 'group' && c.op === op) flat.push(...(c.children || [])); else flat.push(c);
+      });
+      if (flat.length === 0) return null;
+      if (flat.length === 1) return flat[0];
+      return { type: 'group', op, children: flat };
+    }
+    return null;
+  }
+
+  function nodeToFilters(node) {
+    const n = normalizeNode(node);
+    if (!n) return undefined;
+    if (n.type === 'cond') return n.text;
+    if (n.type === 'group') {
+      const parts = (n.children || []).map(nodeToFilters).filter((x) => x != null);
+      if (n.op === 'AND') return { and: parts };
+      return parts; // OR array
+    }
+    return undefined;
+  }
+
+  function summarizeNode(node) {
+    const n = normalizeNode(node);
+    if (!n) return '(no filters)';
+    if (n.type === 'cond') return n.text;
+    const op = n.op;
+    const parts = (n.children || []).map((c) => {
+      if (c.type === 'cond') return c.text;
+      const inner = summarizeNode(c);
+      // add parentheses for nested groups
+      return '(' + inner + ')';
+    });
+    return parts.join(op === 'AND' ? ' AND ' : ' OR ');
   }
 
   function buildFiltersEditor(step, editable) {
     const wrap = document.createElement('div');
     wrap.style.display = 'flex';
     wrap.style.alignItems = 'center';
-    wrap.style.flexWrap = 'wrap';
-    wrap.style.gap = '6px';
+    wrap.style.gap = '8px';
 
-    const model = parseFiltersModel(step.filters);
+    function getNode() { return filtersToNode(step.filters); }
+    const summary = document.createElement('div');
+    summary.style.fontSize = '12px';
+    summary.style.color = '#cbd5e1';
+    summary.style.maxWidth = '380px';
+    summary.style.whiteSpace = 'nowrap';
+    summary.style.overflow = 'hidden';
+    summary.style.textOverflow = 'ellipsis';
+    summary.textContent = summarizeNode(getNode());
 
-    const mode = document.createElement('select');
-    ['single','or','and'].forEach((k) => {
-      const opt = document.createElement('option');
-      opt.value = k; opt.textContent = k.toUpperCase();
-      mode.appendChild(opt);
-    });
-    mode.value = (model.kind === 'none') ? 'single' : model.kind;
-    mode.disabled = !editable;
-    mode.style.background = 'rgba(17,24,39,0.6)';
-    mode.style.border = '1px solid #1f2937';
-    mode.style.color = '#e5e7eb';
-    mode.style.borderRadius = '8px';
-    mode.style.padding = '4px 6px';
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = 'Edit filters';
+    btn.disabled = !editable;
+    btn.addEventListener('click', () => openFiltersModal(step, summary));
 
-    const chips = document.createElement('div');
-    chips.style.display = 'flex';
-    chips.style.flexWrap = 'wrap';
-    chips.style.gap = '6px';
-
-    const addBtn = document.createElement('button');
-    addBtn.className = 'btn';
-    addBtn.textContent = 'Add filter';
-    addBtn.disabled = !editable;
-
-    function updateStepFromModel() {
-      // If multiple items but mode is 'single', coerce to 'or' to keep additional filters
-      if (mode.value === 'single' && model.items.length > 1) mode.value = 'or';
-      model.kind = mode.value;
-      step.filters = serializeFiltersModel(model);
-    }
-
-    function renderChips() {
-      chips.innerHTML = '';
-      model.items.forEach((txt, i) => {
-        const chip = document.createElement('span');
-        chip.style.fontSize = '11px';
-        chip.style.padding = '3px 6px';
-        chip.style.borderRadius = '999px';
-        chip.style.border = '1px solid #1f2937';
-        chip.style.background = 'rgba(15,23,42,0.6)';
-        chip.style.color = '#b3e1ff';
-        chip.textContent = txt;
-        if (editable) {
-          chip.style.cursor = 'pointer';
-          chip.title = 'Click to edit. Shift+Click to remove';
-          chip.addEventListener('click', (e) => {
-            if (e.shiftKey) {
-              model.items.splice(i, 1);
-              updateStepFromModel();
-              renderChips();
-              return;
-            }
-            const v = prompt('Edit filter (variables must be like {{var}}):', txt);
-            if (v == null) return;
-            const nv = String(v).trim();
-            if (nv.length === 0) { model.items.splice(i, 1); } else { model.items[i] = nv; }
-            updateStepFromModel();
-            renderChips();
-          });
-        }
-        chips.appendChild(chip);
-      });
-    }
-
-    mode.addEventListener('change', () => {
-      // If switching to single, keep only the first item
-      if (mode.value === 'single' && model.items.length > 1) {
-        model.items = model.items.length ? [ model.items[0] ] : [];
-      }
-      updateStepFromModel();
-      renderChips();
-    });
-
-    addBtn.addEventListener('click', () => {
-      const v = prompt('Add filter (e.g., {{age}} > 18):', '');
-      if (v == null) return;
-      const nv = String(v).trim();
-      if (!nv) return;
-      if (model.kind === 'none') model.kind = 'single';
-      if (model.kind === 'single' && model.items.length >= 1) {
-        // convert to current selected mode (or by default)
-        model.kind = mode.value || 'or';
-      }
-      model.items.push(nv);
-      updateStepFromModel();
-      renderChips();
-    });
-
-    renderChips();
-    wrap.appendChild(mode);
-    wrap.appendChild(chips);
-    wrap.appendChild(addBtn);
+    wrap.appendChild(summary);
+    wrap.appendChild(btn);
     return wrap;
+  }
+
+  function openFiltersModal(step, summaryEl) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '1000';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'panel';
+    dialog.style.position = 'absolute'; dialog.style.top = '10%'; dialog.style.left = '50%'; dialog.style.transform = 'translateX(-50%)';
+    dialog.style.width = 'min(860px, 92vw)'; dialog.style.maxHeight = '80vh'; dialog.style.overflow = 'auto'; dialog.style.padding = '12px';
+
+    const header = document.createElement('div'); header.className = 'flow-header';
+    const title = document.createElement('div'); title.className = 'flow-title'; title.textContent = 'Edit Filters';
+    const actions = document.createElement('div'); actions.className = 'toolbar';
+    const btnClose = document.createElement('button'); btnClose.className = 'btn'; btnClose.textContent = 'Close';
+    actions.appendChild(btnClose);
+    header.appendChild(title); header.appendChild(actions);
+
+    const body = document.createElement('div'); body.className = 'steps';
+
+    let node = filtersToNode(step.filters) || { type: 'group', op: 'AND', children: [] };
+
+    function buildNodeEditor(n) {
+      if (!n || n.type === 'cond') {
+        const line = document.createElement('div'); line.className = 'field';
+        const l = document.createElement('div'); l.className = 'label'; l.textContent = 'condition';
+        const ta = document.createElement('textarea'); ta.value = String((n && n.text) || '');
+        ta.addEventListener('input', (e) => { if (n) n.text = e.target.value; });
+        line.appendChild(l); line.appendChild(ta);
+        return line;
+      }
+      // group editor
+      const box = document.createElement('div'); box.className = 'step';
+      const head = document.createElement('div'); head.style.display = 'flex'; head.style.alignItems = 'center'; head.style.gap = '8px'; head.style.marginBottom = '8px';
+      const opLabel = document.createElement('div'); opLabel.className = 'label'; opLabel.textContent = 'Operator';
+      const opSel = document.createElement('select');
+      ['AND','OR'].forEach((k) => { const o = document.createElement('option'); o.value = k; o.textContent = k; opSel.appendChild(o); });
+      opSel.value = n.op === 'OR' ? 'OR' : 'AND';
+      opSel.style.background = 'rgba(17,24,39,0.6)'; opSel.style.border = '1px solid #1f2937'; opSel.style.color = '#e5e7eb'; opSel.style.borderRadius = '8px'; opSel.style.padding = '4px 6px';
+      opSel.addEventListener('change', () => { n.op = opSel.value; });
+      head.appendChild(opLabel); head.appendChild(opSel);
+      box.appendChild(head);
+
+      const childWrap = document.createElement('div'); childWrap.style.display = 'grid'; childWrap.style.gap = '8px';
+
+      function renderChildren() {
+        childWrap.innerHTML = '';
+        (n.children || []).forEach((c, idx) => {
+          const row = document.createElement('div'); row.className = 'field';
+          const controls = document.createElement('div'); controls.className = 'label';
+          const btnUp = document.createElement('button'); btnUp.className = 'btn'; btnUp.textContent = '↑'; btnUp.style.marginRight = '4px'; btnUp.disabled = idx === 0;
+          const btnDown = document.createElement('button'); btnDown.className = 'btn'; btnDown.textContent = '↓'; btnDown.style.marginRight = '4px'; btnDown.disabled = idx >= (n.children.length - 1);
+          const btnDel = document.createElement('button'); btnDel.className = 'btn'; btnDel.textContent = 'Delete';
+          btnUp.addEventListener('click', () => { const t = n.children[idx-1]; n.children[idx-1] = n.children[idx]; n.children[idx] = t; renderChildren(); });
+          btnDown.addEventListener('click', () => { const t = n.children[idx+1]; n.children[idx+1] = n.children[idx]; n.children[idx] = t; renderChildren(); });
+          btnDel.addEventListener('click', () => { n.children.splice(idx, 1); renderChildren(); });
+          controls.appendChild(btnUp); controls.appendChild(btnDown); controls.appendChild(btnDel);
+          const editor = buildNodeEditor(c);
+          row.appendChild(controls); row.appendChild(editor);
+          childWrap.appendChild(row);
+        });
+      }
+
+      const addRow = document.createElement('div'); addRow.style.display = 'flex'; addRow.style.gap = '8px'; addRow.style.marginTop = '8px';
+      const btnAddCond = document.createElement('button'); btnAddCond.className = 'btn'; btnAddCond.textContent = 'Add condition';
+      const btnAddGroup = document.createElement('button'); btnAddGroup.className = 'btn'; btnAddGroup.textContent = 'Add subgroup';
+      btnAddCond.addEventListener('click', () => { n.children = n.children || []; n.children.push({ type: 'cond', text: '' }); renderChildren(); });
+      btnAddGroup.addEventListener('click', () => { n.children = n.children || []; n.children.push({ type: 'group', op: 'AND', children: [] }); renderChildren(); });
+      addRow.appendChild(btnAddCond); addRow.appendChild(btnAddGroup);
+
+      renderChildren();
+      box.appendChild(childWrap);
+      box.appendChild(addRow);
+      return box;
+    }
+
+    const editorEl = buildNodeEditor(node);
+
+    const footer = document.createElement('div'); footer.className = 'footer';
+    const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Variables must be written as {{variable}}.';
+    const buttons = document.createElement('div');
+    const btnClear = document.createElement('button'); btnClear.className = 'btn'; btnClear.textContent = 'Clear';
+    const btnSave = document.createElement('button'); btnSave.className = 'btn primary'; btnSave.textContent = 'Save';
+    buttons.appendChild(btnClear); buttons.appendChild(btnSave);
+    footer.appendChild(hint); footer.appendChild(buttons);
+
+    btnClose.addEventListener('click', () => overlay.remove());
+    btnClear.addEventListener('click', () => { node = { type: 'group', op: 'AND', children: [] }; const repl = buildNodeEditor(node); editorEl.replaceWith(repl); body.insertBefore(repl, footer); });
+    btnSave.addEventListener('click', () => {
+      step.filters = nodeToFilters(node);
+      if (summaryEl) summaryEl.textContent = summarizeNode(filtersToNode(step.filters));
+      overlay.remove();
+    });
+
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    body.appendChild(editorEl);
+    dialog.appendChild(footer);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
   }
 
   function downloadJson(obj, filename) {
