@@ -43,6 +43,14 @@
     .footer { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1f2937; }
     .hint { color: var(--muted); font-size: 12px; }
     .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background: rgba(2,6,23,0.6); border: 1px solid #1f2937; padding: 2px 6px; border-radius: 6px; }
+    /* Drag & drop handles and selection */
+    .grab-handle { display: flex; flex-direction: column; gap: 3px; cursor: grab; padding-right: 10px; padding-left: 2px; }
+    .grab-handle span { display: block; width: 14px; height: 2px; background: #64748b; border-radius: 2px; }
+    .step:hover .grab-handle span { background: #94a3b8; }
+    .step.selected { border-color: rgba(139,92,246,0.65); background: rgba(139,92,246,0.10); box-shadow: 0 0 0 1px rgba(139,92,246,0.15) inset; }
+    .step.selected .grab-handle span { background: #c084fc; }
+    .insert-row.drop-active .btn { border-color: rgba(34,211,238,0.9); background: linear-gradient(180deg, rgba(34,211,238,0.28) 0%, rgba(34,211,238,0.16) 100%); color: #e0f2fe; }
+    .insert-row.drop-active div[style*="height: 1px"] { background: #22d3ee !important; }
   </style>
 </head>
 <body>
@@ -133,6 +141,10 @@
   let versionsPaging = { key: '', names: [], index: 0, pageSize: 5, busy: false };
   let flowKeys = [];
   let triggersMap = new Map(); // key -> trigger (best-effort)
+  // Selection and drag state
+  const selectedSteps = new Set();
+  let lastSelectedIndex = -1;
+  let isDraggingSteps = false;
 
   // Load config from localStorage or URL params (client_id, bucket).
   function loadConfig() {
@@ -697,14 +709,53 @@
     steps.forEach((step, idx) => {
       const s = document.createElement('div');
       s.className = 'step';
+      if (selectedSteps.has(step)) s.classList.add('selected');
 
       const head = document.createElement('div');
       head.className = 'step-head';
       const left = document.createElement('div');
+      left.style.display = 'flex';
+      left.style.alignItems = 'center';
+      left.style.gap = '8px';
+      // Grab handle for selection and dragging
+      const grab = document.createElement('div');
+      grab.className = 'grab-handle';
+      grab.title = 'Click to select. Drag to move selected steps.';
+      grab.draggable = true;
+      grab.innerHTML = '<span></span><span></span><span></span>';
+      grab.addEventListener('click', (e) => {
+        const multi = e.metaKey || e.ctrlKey;
+        const range = e.shiftKey;
+        if (range && Array.isArray(def.steps) && lastSelectedIndex >= 0) {
+          const a = Math.min(lastSelectedIndex, idx);
+          const b = Math.max(lastSelectedIndex, idx);
+          for (let i = a; i <= b; i++) selectedSteps.add(def.steps[i]);
+        } else if (multi) {
+          if (selectedSteps.has(step)) selectedSteps.delete(step); else selectedSteps.add(step);
+          lastSelectedIndex = idx;
+        } else {
+          selectedSteps.clear();
+          selectedSteps.add(step);
+          lastSelectedIndex = idx;
+        }
+        renderSteps();
+      });
+      grab.addEventListener('dragstart', (e) => {
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'steps'); } catch (_) {}
+        if (!selectedSteps.has(step)) { selectedSteps.clear(); selectedSteps.add(step); lastSelectedIndex = idx; }
+        isDraggingSteps = true;
+        document.body.dataset.dragging = '1';
+      });
+      grab.addEventListener('dragend', () => {
+        isDraggingSteps = false;
+        delete document.body.dataset.dragging;
+        document.querySelectorAll('.insert-row.drop-active').forEach((el) => el.classList.remove('drop-active'));
+      });
       const type = step.ask ? 'ask' : (step.say ? 'say' : (step.wait ? 'wait' : (step.script ? 'script' : 'step')));
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = type.toUpperCase();
+      left.appendChild(grab);
       left.appendChild(badge);
       const right = document.createElement('div');
       right.style.display = 'flex';
@@ -979,6 +1030,7 @@
     row.style.alignItems = 'center';
     row.style.justifyContent = 'center';
     row.style.margin = '6px 0';
+    row.className = 'insert-row';
 
     const lineL = document.createElement('div'); lineL.style.flex = '1'; lineL.style.height = '1px'; lineL.style.background = '#1f2937';
     const btn = document.createElement('button');
@@ -990,7 +1042,46 @@
     const lineR = document.createElement('div'); lineR.style.flex = '1'; lineR.style.height = '1px'; lineR.style.background = '#1f2937';
 
     row.appendChild(lineL); row.appendChild(btn); row.appendChild(lineR);
+    // Drag-and-drop target for moving selected steps
+    row.addEventListener('dragover', (e) => {
+      if (!isDraggingSteps) return;
+      e.preventDefault();
+      row.classList.add('drop-active');
+    });
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('drop-active');
+    });
+    row.addEventListener('drop', (e) => {
+      if (!isDraggingSteps) return;
+      e.preventDefault();
+      row.classList.remove('drop-active');
+      moveSelectedSteps(def, insertIndex);
+    });
     return row;
+  }
+
+  function moveSelectedSteps(def, insertIndex) {
+    try {
+      const steps = Array.isArray(def.steps) ? def.steps : [];
+      if (steps.length === 0 || selectedSteps.size === 0) return;
+      const indices = [];
+      const moving = [];
+      steps.forEach((st, i) => { if (selectedSteps.has(st)) { indices.push(i); moving.push(st); } });
+      if (indices.length === 0) return;
+      const minIdx = Math.min(...indices);
+      const maxIdx = Math.max(...indices);
+      if (insertIndex >= minIdx && insertIndex <= (maxIdx + 1)) return;
+      indices.sort((a, b) => b - a).forEach((i) => { steps.splice(i, 1); });
+      const removedBefore = indices.filter((i) => i < insertIndex).length;
+      const target = Math.max(0, Math.min(insertIndex - removedBefore, steps.length));
+      steps.splice(target, 0, ...moving);
+      renderSteps();
+      try {
+        const all = els.steps.querySelectorAll('.step');
+        const first = all[target];
+        if (first && typeof first.scrollIntoView === 'function') first.scrollIntoView({ block: 'center' });
+      } catch (_) {}
+    } catch (_) {}
   }
 
   function openAddStepModal(def, insertIndex) {
