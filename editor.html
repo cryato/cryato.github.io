@@ -690,6 +690,10 @@
     els.steps.appendChild(descField);
 
     const steps = Array.isArray(def.steps) ? def.steps : [];
+
+    // Insert button before the first step
+    els.steps.appendChild(buildInsertBetweenRow(def, 0));
+
     steps.forEach((step, idx) => {
       const s = document.createElement('div');
       s.className = 'step';
@@ -745,6 +749,9 @@
       }
 
       els.steps.appendChild(s);
+
+      // Insert button after this step (between idx and idx+1)
+      els.steps.appendChild(buildInsertBetweenRow(def, idx + 1));
     });
   }
 
@@ -963,6 +970,221 @@
     dialog.appendChild(footer);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+  }
+
+  // ---- Add Step (+) UI ----
+  function buildInsertBetweenRow(def, insertIndex) {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'center';
+    row.style.margin = '6px 0';
+
+    const lineL = document.createElement('div'); lineL.style.flex = '1'; lineL.style.height = '1px'; lineL.style.background = '#1f2937';
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = '+';
+    btn.title = 'Add step here';
+    btn.style.width = '32px'; btn.style.height = '28px'; btn.style.padding = '0';
+    btn.addEventListener('click', () => openAddStepModal(def, insertIndex));
+    const lineR = document.createElement('div'); lineR.style.flex = '1'; lineR.style.height = '1px'; lineR.style.background = '#1f2937';
+
+    row.appendChild(lineL); row.appendChild(btn); row.appendChild(lineR);
+    return row;
+  }
+
+  function openAddStepModal(def, insertIndex) {
+    const overlay = document.createElement('div'); overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '1000';
+    const dialog = document.createElement('div'); dialog.className = 'panel'; dialog.style.position = 'absolute'; dialog.style.top = '10%'; dialog.style.left = '50%'; dialog.style.transform = 'translateX(-50%)'; dialog.style.width = 'min(860px, 92vw)'; dialog.style.maxHeight = '80vh'; dialog.style.overflow = 'auto'; dialog.style.padding = '12px';
+
+    const header = document.createElement('div'); header.className = 'flow-header';
+    const title = document.createElement('div'); title.className = 'flow-title'; title.textContent = 'Add Step';
+    const actions = document.createElement('div'); actions.className = 'toolbar';
+    const btnClose = document.createElement('button'); btnClose.className = 'btn'; btnClose.textContent = 'Close';
+    actions.appendChild(btnClose); header.appendChild(title); header.appendChild(actions);
+
+    const body = document.createElement('div'); body.className = 'steps';
+
+    // Type selector
+    const typeField = document.createElement('div'); typeField.className = 'field';
+    const typeLabel = document.createElement('div'); typeLabel.className = 'label'; typeLabel.textContent = 'Type';
+    const typeSel = document.createElement('select');
+    const types = [
+      { v: 'say', n: 'Say (bot message)' },
+      { v: 'ask', n: 'Ask (await user answer)' },
+      { v: 'wait', n: 'Wait' },
+      { v: 'label', n: 'Label' },
+      { v: 'goto', n: 'Goto (jump to label)' },
+      { v: 'trigger', n: 'Trigger another flow' },
+      { v: 'set_attributes', n: 'Set attributes' },
+      { v: 'web_request', n: 'Web request' },
+      { v: 'sheets_add_row', n: 'Sheets: add row' },
+      { v: 'sheets_find_row', n: 'Sheets: find row' },
+      { v: 'sheets_get_row', n: 'Sheets: get row' },
+      { v: 'script', n: 'Run script' }
+    ];
+    types.forEach((t) => { const o = document.createElement('option'); o.value = t.v; o.textContent = t.n; typeSel.appendChild(o); });
+    typeField.appendChild(typeLabel); typeField.appendChild(typeSel);
+
+    // Dynamic form container
+    const formWrap = document.createElement('div');
+
+    function field(label, inputEl) {
+      const f = document.createElement('div'); f.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = label;
+      f.appendChild(l); f.appendChild(inputEl); return f;
+    }
+
+    function rebuildForm() {
+      formWrap.innerHTML = '';
+      const t = typeSel.value;
+      if (t === 'say') {
+        const ta = document.createElement('textarea');
+        ta.placeholder = 'Message text (supports {{variables}})';
+        formWrap.appendChild(field('say', ta));
+      } else if (t === 'ask') {
+        const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'Variable name (saveAs)';
+        const kb = document.createElement('textarea'); kb.placeholder = 'Keyboard options (one per line, optional)';
+        const ver = document.createElement('select'); ['','strict'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || '(none)'; ver.appendChild(o); });
+        formWrap.appendChild(field('ask', ta));
+        formWrap.appendChild(field('saveAs', save));
+        formWrap.appendChild(field('keyboard', kb));
+        formWrap.appendChild(field('verification', ver));
+      } else if (t === 'wait') {
+        const secs = document.createElement('input'); secs.type = 'number'; secs.placeholder = 'Seconds'; secs.min = '0';
+        formWrap.appendChild(field('seconds', secs));
+      } else if (t === 'label') {
+        const i = document.createElement('input'); i.type = 'text'; i.placeholder = 'Label name';
+        formWrap.appendChild(field('label', i));
+      } else if (t === 'goto') {
+        const i = document.createElement('input'); i.type = 'text'; i.placeholder = 'Target label name';
+        formWrap.appendChild(field('goto', i));
+      } else if (t === 'trigger') {
+        const i = document.createElement('input'); i.type = 'text'; i.placeholder = 'Flow key or /trigger';
+        formWrap.appendChild(field('trigger', i));
+      } else if (t === 'set_attributes') {
+        const ta = document.createElement('textarea'); ta.placeholder = '{ "name": "{{name}}" }';
+        formWrap.appendChild(field('attributes (JSON object)', ta));
+      } else if (t === 'web_request') {
+        const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'https://api.example.com';
+        const method = document.createElement('select'); ['GET','POST','PUT','PATCH','DELETE'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; method.appendChild(o); });
+        const body = document.createElement('textarea'); body.placeholder = '{ "foo": "bar" } (optional)';
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
+        formWrap.appendChild(field('url', url));
+        formWrap.appendChild(field('method', method));
+        formWrap.appendChild(field('body JSON', body));
+        formWrap.appendChild(field('saveAs', save));
+      } else if (t === 'sheets_add_row') {
+        const ta = document.createElement('textarea'); ta.placeholder = '{ "spreadsheetId": "...", "sheet": "Sheet1", "values": {"A": "{{name}}"} }';
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
+        formWrap.appendChild(field('config (JSON)', ta));
+        formWrap.appendChild(field('saveAs', save));
+      } else if (t === 'sheets_find_row') {
+        const ta = document.createElement('textarea'); ta.placeholder = '{ "spreadsheetId": "...", "sheet": "Sheet1", "where": {"A": "{{email}}"} }';
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
+        formWrap.appendChild(field('config (JSON)', ta));
+        formWrap.appendChild(field('saveAs', save));
+      } else if (t === 'sheets_get_row') {
+        const ta = document.createElement('textarea'); ta.placeholder = '{ "spreadsheetId": "...", "sheet": "Sheet1", "row": {{rowNum}} }';
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
+        formWrap.appendChild(field('config (JSON)', ta));
+        formWrap.appendChild(field('saveAs', save));
+      } else if (t === 'script') {
+        const file = document.createElement('input'); file.type = 'text'; file.placeholder = 'path/to/script.js';
+        const timeout = document.createElement('input'); timeout.type = 'number'; timeout.placeholder = 'timeoutMs (optional)'; timeout.min = '0';
+        formWrap.appendChild(field('file', file));
+        formWrap.appendChild(field('timeoutMs', timeout));
+      }
+    }
+
+    rebuildForm();
+    typeSel.addEventListener('change', rebuildForm);
+
+    const footer = document.createElement('div'); footer.className = 'footer';
+    const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Fill fields; variables use {{name}}.';
+    const actions2 = document.createElement('div');
+    const btnAdd = document.createElement('button'); btnAdd.className = 'btn primary'; btnAdd.textContent = 'Add step';
+    actions2.appendChild(btnAdd);
+    footer.appendChild(hint); footer.appendChild(actions2);
+
+    function parseJsonSafe(txt) { try { return JSON.parse(txt); } catch (_) { return null; } }
+
+    btnAdd.addEventListener('click', () => {
+      const t = typeSel.value;
+      let step = {};
+      const q = (sel) => formWrap.querySelector(sel);
+      if (t === 'say') {
+        step.say = String((q('textarea') || {}).value || '');
+      } else if (t === 'ask') {
+        const ta = q('textarea'); const save = formWrap.querySelector('input[type="text"]');
+        const areas = formWrap.querySelectorAll('textarea');
+        const kb = areas.length > 1 ? areas[1] : null;
+        const ver = formWrap.querySelector('select');
+        step.ask = String((ta && ta.value) || '');
+        if (save && save.value) step.saveAs = String(save.value);
+        if (kb && kb.value) step.keyboard = kb.value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+        if (ver && ver.value) step.verification = ver.value;
+      } else if (t === 'wait') {
+        const secs = formWrap.querySelector('input[type="number"]');
+        const n = Number(secs && secs.value);
+        step.wait = Number.isFinite(n) ? { seconds: n } : { seconds: 1 };
+      } else if (t === 'label') {
+        const i = formWrap.querySelector('input[type="text"]'); step.label = String((i && i.value) || 'label');
+      } else if (t === 'goto') {
+        const i = formWrap.querySelector('input[type="text"]'); step.goto = String((i && i.value) || 'label');
+      } else if (t === 'trigger') {
+        const i = formWrap.querySelector('input[type="text"]'); step.trigger = String((i && i.value) || '');
+      } else if (t === 'set_attributes') {
+        const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}'); step.set_attributes = obj || {};
+      } else if (t === 'web_request') {
+        const inputs = formWrap.querySelectorAll('input'); const url = inputs[0]; const save = inputs[1];
+        const method = formWrap.querySelector('select'); const body = formWrap.querySelector('textarea');
+        const req = { url: String((url && url.value) || '') };
+        req.method = method && method.value ? method.value : 'GET';
+        const bodyObj = parseJsonSafe(body && body.value || ''); if (bodyObj) req.body = bodyObj;
+        if (save && save.value) req.saveAs = String(save.value);
+        step.web_request = req;
+      } else if (t === 'sheets_add_row') {
+        const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}');
+        const save = formWrap.querySelector('input[type="text"]');
+        step.sheets_add_row = obj || {};
+        if (save && save.value) step.sheets_add_row.saveAs = String(save.value);
+      } else if (t === 'sheets_find_row') {
+        const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}');
+        const save = formWrap.querySelector('input[type="text"]');
+        step.sheets_find_row = obj || {};
+        if (save && save.value) step.sheets_find_row.saveAs = String(save.value);
+      } else if (t === 'sheets_get_row') {
+        const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}');
+        const save = formWrap.querySelector('input[type="text"]');
+        step.sheets_get_row = obj || {};
+        if (save && save.value) step.sheets_get_row.saveAs = String(save.value);
+      } else if (t === 'script') {
+        const inputs = formWrap.querySelectorAll('input');
+        const file = inputs[0]; const timeout = inputs[1];
+        const spec = { file: String((file && file.value) || '') };
+        const n = Number(timeout && timeout.value);
+        if (Number.isFinite(n) && n > 0) spec.timeoutMs = n;
+        step.script = spec;
+      }
+
+      if (!Array.isArray(def.steps)) def.steps = [];
+      const pos = Math.max(0, Math.min(insertIndex, def.steps.length));
+      def.steps.splice(pos, 0, step);
+      overlay.remove();
+      renderSteps();
+    });
+
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    body.appendChild(typeField);
+    body.appendChild(formWrap);
+    dialog.appendChild(footer);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    btnClose.addEventListener('click', () => overlay.remove());
   }
 
   function downloadJson(obj, filename) {
