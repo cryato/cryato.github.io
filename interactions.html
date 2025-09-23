@@ -975,15 +975,11 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
         if (!flowDef || !Array.isArray(flowDef.steps)) flowDef.steps = [];
         const pos = Math.max(0, Math.min(insertIndex, flowDef.steps.length)); flowDef.steps.splice(pos, 0, step);
         // Persist override for this key so future reloads keep edits until published
-        if (flow && flow.updated_at != null) {
-          // flowDef is the same object as flow; set override by current flow key
-          // In this scope, we can derive key from latest loaded flow by scanning flowDoc
-          try {
-            const entry = Array.from(Object.entries(flowDoc && flowDoc.flows || {})).find(([, v]) => v === flowDef);
-            const key = entry ? entry[0] : '';
-            if (key) flowOverrides.set(key, flowDef);
-          } catch (_) {}
-        }
+        try {
+          const entry = Array.from(Object.entries((flowDoc && flowDoc.flows) || {})).find(([, v]) => v === flowDef);
+          const key = entry ? entry[0] : '';
+          if (key) flowOverrides.set(key, flowDef);
+        } catch (_) {}
         overlay.remove();
         if (typeof onInserted === 'function') onInserted();
       });
