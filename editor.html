@@ -145,6 +145,7 @@
   const selectedSteps = new Set();
   let lastSelectedIndex = -1;
   let isDraggingSteps = false;
+  let openContextMenuEl = null;
 
   // Load config from localStorage or URL params (client_id, bucket).
   function loadConfig() {
@@ -711,6 +712,19 @@
       s.className = 'step';
       if (selectedSteps.has(step)) s.classList.add('selected');
 
+      // Right-click context menu for duplicate
+      s.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        try {
+          if (!selectedSteps.has(step)) {
+            selectedSteps.clear();
+            selectedSteps.add(step);
+            lastSelectedIndex = idx;
+          }
+          openStepContextMenu(e, def);
+        } catch (_) {}
+      });
+
       const head = document.createElement('div');
       head.className = 'step-head';
       const left = document.createElement('div');
@@ -1081,6 +1095,111 @@
         const first = all[target];
         if (first && typeof first.scrollIntoView === 'function') first.scrollIntoView({ block: 'center' });
       } catch (_) {}
+    } catch (_) {}
+  }
+
+  function closeContextMenu() {
+    try {
+      if (openContextMenuEl) { openContextMenuEl.remove(); openContextMenuEl = null; }
+    } catch (_) { openContextMenuEl = null; }
+  }
+
+  function openStepContextMenu(event, def) {
+    closeContextMenu();
+    const menu = document.createElement('div');
+    menu.className = 'panel';
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '10000';
+    menu.style.padding = '6px';
+    menu.style.minWidth = '180px';
+    menu.style.background = 'rgba(17,24,39,0.98)';
+    menu.style.border = '1px solid #1f2937';
+    menu.style.borderRadius = '10px';
+
+    const item = document.createElement('button');
+    item.className = 'btn';
+    const count = selectedSteps.size || 0;
+    item.textContent = count > 1 ? `Duplicate selected (${count})` : 'Duplicate selected';
+    item.style.width = '100%';
+    item.addEventListener('click', () => {
+      try { duplicateSelectedSteps(def); } catch (_) {}
+      closeContextMenu();
+    });
+    menu.appendChild(item);
+
+    const x = event.clientX;
+    const y = event.clientY;
+    menu.style.left = Math.max(0, Math.min(x, window.innerWidth - 200)) + 'px';
+    menu.style.top = Math.max(0, Math.min(y, window.innerHeight - 60)) + 'px';
+
+    document.body.appendChild(menu);
+    openContextMenuEl = menu;
+
+    const offClick = (ev) => {
+      if (!menu.contains(ev.target)) {
+        document.removeEventListener('mousedown', offClick, true);
+        document.removeEventListener('scroll', closeContextMenu, true);
+        document.removeEventListener('keydown', onKey, true);
+        closeContextMenu();
+      }
+    };
+    const onKey = (ev) => { if (ev.key === 'Escape') { offClick(ev); } };
+    document.addEventListener('mousedown', offClick, true);
+    document.addEventListener('scroll', closeContextMenu, true);
+    document.addEventListener('keydown', onKey, true);
+  }
+
+  function duplicateSelectedSteps(def) {
+    if (!def || !Array.isArray(def.steps)) return;
+    const steps = def.steps;
+    if (steps.length === 0 || selectedSteps.size === 0) return;
+
+    // Collect selected indices and originals in increasing order
+    const selectedIndices = [];
+    steps.forEach((st, i) => { if (selectedSteps.has(st)) selectedIndices.push(i); });
+    if (selectedIndices.length === 0) return;
+    selectedIndices.sort((a, b) => a - b);
+
+    const insertAfter = Math.max(...selectedIndices);
+
+    // Existing step_id set
+    const existingIds = new Set();
+    steps.forEach((s) => { if (s && typeof s.step_id === 'string' && s.step_id) existingIds.add(s.step_id); });
+
+    function genId() {
+      const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let out = '';
+      for (let i = 0; i < 8; i++) out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+      return out;
+    }
+
+    const clones = selectedIndices.map((i) => {
+      const original = steps[i];
+      const cloned = JSON.parse(JSON.stringify(original));
+      // Ensure a unique step_id
+      try {
+        let id = '';
+        do { id = genId(); } while (existingIds.has(id));
+        cloned.step_id = id;
+        existingIds.add(id);
+      } catch (_) {}
+      return cloned;
+    });
+
+    const target = Math.min(insertAfter + 1, steps.length);
+    steps.splice(target, 0, ...clones);
+
+    // Select the new clones
+    selectedSteps.clear();
+    clones.forEach((c) => selectedSteps.add(c));
+    lastSelectedIndex = target + clones.length - 1;
+
+    renderSteps();
+    // Scroll to first of new clones
+    try {
+      const all = els.steps.querySelectorAll('.step');
+      const first = all[target];
+      if (first && typeof first.scrollIntoView === 'function') first.scrollIntoView({ block: 'center' });
     } catch (_) {}
   }
 
