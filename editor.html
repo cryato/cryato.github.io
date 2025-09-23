@@ -49,6 +49,8 @@
     .step:hover .grab-handle span { background: #94a3b8; }
     .step.selected { border-color: rgba(139,92,246,0.65); background: rgba(139,92,246,0.10); box-shadow: 0 0 0 1px rgba(139,92,246,0.15) inset; }
     .step.selected .grab-handle span { background: #c084fc; }
+    .step.deleted { opacity: 0.6; filter: grayscale(0.2); }
+    .badge.warn { color: #fecaca; border-color: #7f1d1d; background: rgba(127,29,29,0.25); }
     .insert-row.drop-active .btn { border-color: rgba(34,211,238,0.9); background: linear-gradient(180deg, rgba(34,211,238,0.28) 0%, rgba(34,211,238,0.16) 100%); color: #e0f2fe; }
     .insert-row.drop-active div[style*="height: 1px"] { background: #22d3ee !important; }
   </style>
@@ -146,6 +148,8 @@
   let lastSelectedIndex = -1;
   let isDraggingSteps = false;
   let openContextMenuEl = null;
+  // Track pending deletions locally before save
+  const deletedStepsSet = new Set();
 
   // Load config from localStorage or URL params (client_id, bucket).
   function loadConfig() {
@@ -711,6 +715,7 @@
       const s = document.createElement('div');
       s.className = 'step';
       if (selectedSteps.has(step)) s.classList.add('selected');
+      if (deletedStepsSet.has(step)) s.classList.add('deleted');
 
       // Right-click context menu for duplicate
       s.addEventListener('contextmenu', (e) => {
@@ -769,6 +774,12 @@
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = type.toUpperCase();
+      if (deletedStepsSet.has(step)) {
+        const delB = document.createElement('span');
+        delB.className = 'badge warn';
+        delB.textContent = 'DELETED';
+        left.appendChild(delB);
+      }
       left.appendChild(grab);
       left.appendChild(badge);
       const right = document.createElement('div');
@@ -1116,16 +1127,37 @@
     menu.style.border = '1px solid #1f2937';
     menu.style.borderRadius = '10px';
 
-    const item = document.createElement('button');
-    item.className = 'btn';
     const count = selectedSteps.size || 0;
-    item.textContent = count > 1 ? `Duplicate selected (${count})` : 'Duplicate selected';
-    item.style.width = '100%';
-    item.addEventListener('click', () => {
-      try { duplicateSelectedSteps(def); } catch (_) {}
-      closeContextMenu();
-    });
-    menu.appendChild(item);
+    const btnDup = document.createElement('button');
+    btnDup.className = 'btn';
+    btnDup.textContent = count > 1 ? `Duplicate selected (${count})` : 'Duplicate selected';
+    btnDup.style.width = '100%';
+    btnDup.style.marginBottom = '6px';
+    btnDup.addEventListener('click', () => { try { duplicateSelectedSteps(def); } catch (_) {} closeContextMenu(); });
+    menu.appendChild(btnDup);
+
+    const anyDeletedSelected = (() => {
+      for (const st of selectedSteps) { if (deletedStepsSet.has(st)) return true; }
+      return false;
+    })();
+
+    if (count > 0 && !anyDeletedSelected) {
+      const btnDel = document.createElement('button');
+      btnDel.className = 'btn';
+      btnDel.textContent = count > 1 ? `Delete selected (${count})` : 'Delete selected';
+      btnDel.style.width = '100%';
+      btnDel.addEventListener('click', () => { try { markSelectedStepsDeleted(); } catch (_) {} closeContextMenu(); });
+      menu.appendChild(btnDel);
+    }
+
+    if (anyDeletedSelected) {
+      const btnRestore = document.createElement('button');
+      btnRestore.className = 'btn';
+      btnRestore.textContent = count > 1 ? `Restore selected (${count})` : 'Restore selected';
+      btnRestore.style.width = '100%';
+      btnRestore.addEventListener('click', () => { try { restoreSelectedSteps(); } catch (_) {} closeContextMenu(); });
+      menu.appendChild(btnRestore);
+    }
 
     const x = event.clientX;
     const y = event.clientY;
@@ -1147,6 +1179,18 @@
     document.addEventListener('mousedown', offClick, true);
     document.addEventListener('scroll', closeContextMenu, true);
     document.addEventListener('keydown', onKey, true);
+  }
+
+  function markSelectedStepsDeleted() {
+    if (selectedSteps.size === 0) return;
+    for (const st of selectedSteps) deletedStepsSet.add(st);
+    renderSteps();
+  }
+
+  function restoreSelectedSteps() {
+    if (selectedSteps.size === 0) return;
+    for (const st of selectedSteps) deletedStepsSet.delete(st);
+    renderSteps();
   }
 
   function duplicateSelectedSteps(def) {
@@ -1421,6 +1465,17 @@
     if (!hasValidToken()) { alert('Please sign in first.'); return; }
     // Ensure each step has a unique 8-char step_id before saving
     try {
+      // Apply local deletions before generating IDs and saving
+      if (def && Array.isArray(def.steps) && deletedStepsSet.size > 0) {
+        const filtered = def.steps.filter((s) => !deletedStepsSet.has(s));
+        if (filtered.length !== def.steps.length) {
+          def.steps = filtered;
+          // Update selection to remove references to deleted steps
+          const still = new Set(filtered);
+          Array.from(selectedSteps).forEach((st) => { if (!still.has(st)) selectedSteps.delete(st); });
+        }
+        deletedStepsSet.clear();
+      }
       const existing = new Set();
       function genId() {
         const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -1510,6 +1565,7 @@
         });
       } catch (_) {}
       alert('Saved to Cloud.');
+      try { renderSteps(); } catch (_) {}
     } catch (e) {
       console.error(e);
       alert('Save failed: ' + e.message);
