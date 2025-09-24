@@ -898,6 +898,8 @@
     // SAY
         if (step.say != null) {
       container.appendChild(fieldText('say', step.say, (v) => { step.say = v; }));
+      const uidInit = step.user_id != null ? String(step.user_id) : '';
+      container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
       return;
     }
 
@@ -928,6 +930,8 @@
     // TRIGGER
     if (step.trigger != null) {
       container.appendChild(fieldText('trigger', step.trigger, (v) => { step.trigger = v; }, true));
+      const uidInit = step.user_id != null ? String(step.user_id) : '';
+      container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
       return;
     }
 
@@ -1524,7 +1528,9 @@
       if (t === 'say') {
         const ta = document.createElement('textarea');
         ta.placeholder = 'Message text (supports {{variables}})';
+        const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
         formWrap.appendChild(field('say', ta));
+        formWrap.appendChild(field('user_id', uid));
       } else if (t === 'ask') {
         const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
         const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'Variable name (saveAs)';
@@ -1545,7 +1551,9 @@
         formWrap.appendChild(field('goto', i));
       } else if (t === 'trigger') {
         const i = document.createElement('input'); i.type = 'text'; i.placeholder = 'Flow key or /trigger';
+        const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
         formWrap.appendChild(field('trigger', i));
+        formWrap.appendChild(field('user_id', uid));
       } else if (t === 'set_attributes') {
         const ta = document.createElement('textarea'); ta.placeholder = '{ "name": "{{name}}" }';
         formWrap.appendChild(field('attributes (JSON object)', ta));
@@ -1604,6 +1612,9 @@
       const q = (sel) => formWrap.querySelector(sel);
       if (t === 'say') {
         step.say = String((q('textarea') || {}).value || '');
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const uid = inputs && inputs[0];
+        if (uid && uid.value) step.user_id = String(uid.value);
       } else if (t === 'ask') {
         const ta = q('textarea'); const save = formWrap.querySelector('input[type="text"]');
         const areas = formWrap.querySelectorAll('textarea');
@@ -1622,7 +1633,11 @@
       } else if (t === 'goto') {
         const i = formWrap.querySelector('input[type="text"]'); step.goto = String((i && i.value) || 'label');
       } else if (t === 'trigger') {
-        const i = formWrap.querySelector('input[type="text"]'); step.trigger = String((i && i.value) || '');
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const trg = inputs && inputs[0];
+        const uid = inputs && inputs[1];
+        step.trigger = String((trg && trg.value) || '');
+        if (uid && uid.value) step.user_id = String(uid.value);
       } else if (t === 'set_attributes') {
         const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}'); step.set_attributes = obj || {};
       } else if (t === 'web_request') {

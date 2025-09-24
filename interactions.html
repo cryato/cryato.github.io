@@ -504,6 +504,11 @@
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
         const ta = document.createElement('textarea'); ta.value = String(step.say || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.say = e.target.value; });
         field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        // user_id override
+        const f2 = document.createElement('div'); f2.className = 'field';
+        const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id';
+        const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.user_id || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.user_id = v; else delete step.user_id; });
+        f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
         return;
       }
 
@@ -540,6 +545,11 @@
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'trigger';
         const input = document.createElement('input'); input.type = 'text'; input.value = String(step.trigger || ''); input.disabled = !editable; if (editable) input.addEventListener('input', (e) => { step.trigger = e.target.value; });
         field.appendChild(label); field.appendChild(input); container.appendChild(field);
+        // user_id override
+        const f2 = document.createElement('div'); f2.className = 'field';
+        const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id';
+        const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.user_id || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.user_id = v; else delete step.user_id; });
+        f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
         return;
       }
 
