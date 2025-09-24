@@ -396,7 +396,18 @@
       head.style.display = 'flex'; head.style.alignItems = 'center'; head.style.marginBottom = '6px';
       const badge = document.createElement('span');
       badge.className = 'badge';
-      const type = st.ask ? 'ask' : (st.say ? 'say' : (st.wait ? 'wait' : (st.goto ? 'goto' : (st.label ? 'label' : (st.script ? 'script' : 'step')))));
+      const type = st.ask ? 'ask'
+        : (st.say ? 'say'
+        : (st.wait ? 'wait'
+        : (st.label ? 'label'
+        : (st.goto ? 'goto'
+        : (st.trigger ? 'trigger'
+        : (st.set_attributes ? 'set_attributes'
+        : (st.web_request ? 'web_request'
+        : (st.sheets_add_row ? 'sheets_add_row'
+        : (st.sheets_find_row ? 'sheets_find_row'
+        : (st.sheets_get_row ? 'sheets_get_row'
+        : (st.script ? 'script' : 'step')))))))))));
       badge.textContent = type.toUpperCase();
       const idxEl = document.createElement('span');
       idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
@@ -405,19 +416,6 @@
       head.appendChild(badge);
       head.appendChild(idxEl);
       head.appendChild(spacer);
-      // Optional step name (ASK/SAY only)
-      try {
-        const hasName = (typeof st.name === 'string' && st.name.trim().length > 0);
-        const isAskSay = (st.ask != null || st.say != null);
-        if (isAskSay && hasName) {
-          const nameEl = document.createElement('span');
-          nameEl.style.color = '#e2e8f0';
-          nameEl.style.fontSize = '12px';
-          nameEl.style.marginLeft = '8px';
-          nameEl.textContent = st.name.trim();
-          head.appendChild(nameEl);
-        }
-      } catch (_) {}
       head.appendChild(buildFiltersEditor(st, editable));
       wrap.appendChild(head);
 
@@ -444,11 +442,6 @@
     function appendEditorsForStep(step, container, editable) {
       // ASK
       if (step.ask != null) {
-        // name
-        const f0 = document.createElement('div'); f0.className = 'field';
-        const l0 = document.createElement('div'); l0.className = 'label'; l0.textContent = 'name';
-        const i0 = document.createElement('input'); i0.type = 'text'; i0.value = String(step.name || ''); i0.disabled = !editable; if (editable) i0.addEventListener('input', (e) => { const v = e.target.value; if (v) step.name = v; else delete step.name; });
-        f0.appendChild(l0); f0.appendChild(i0); container.appendChild(f0);
         const field = document.createElement('div'); field.className = 'field';
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
         const ta = document.createElement('textarea'); ta.value = String(step.ask || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.ask = e.target.value; });
@@ -472,11 +465,6 @@
 
       // SAY
       if (step.say != null) {
-        // name
-        const f0 = document.createElement('div'); f0.className = 'field';
-        const l0 = document.createElement('div'); l0.className = 'label'; l0.textContent = 'name';
-        const i0 = document.createElement('input'); i0.type = 'text'; i0.value = String(step.name || ''); i0.disabled = !editable; if (editable) i0.addEventListener('input', (e) => { const v = e.target.value; if (v) step.name = v; else delete step.name; });
-        f0.appendChild(l0); f0.appendChild(i0); container.appendChild(f0);
         const field = document.createElement('div'); field.className = 'field';
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
         const ta = document.createElement('textarea'); ta.value = String(step.say || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.say = e.target.value; });
