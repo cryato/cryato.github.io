@@ -797,38 +797,173 @@
       head.appendChild(left);
       head.appendChild(right);
 
-      // Editable fields for ask/say only
-      if (step.ask != null || step.say != null) {
-        if (step.ask != null) {
-          const field = fieldText('ask', step.ask, (v) => { step.ask = v; });
-          s.appendChild(field);
-        }
-        if (step.saveAs != null) {
-          const field = fieldText('saveAs', step.saveAs, (v) => { step.saveAs = v; }, true);
-          s.appendChild(field);
-        }
-        if (step.say != null) {
-          const field = fieldText('say', step.say, (v) => { step.say = v; });
-          s.appendChild(field);
-        }
-      } else {
-        const readOnly = document.createElement('div');
-        readOnly.className = 'field';
-        const label = document.createElement('div');
-        label.className = 'label';
-        label.textContent = 'Details';
-        const val = document.createElement('div');
-        val.textContent = JSON.stringify(step, null, 2);
-        readOnly.appendChild(label);
-        readOnly.appendChild(val);
-        s.appendChild(readOnly);
-      }
+      // Editable fields for all step types (hide step_id; edit filters via modal)
+      appendEditorsForStep(step, s);
 
       els.steps.appendChild(s);
 
       // Insert button after this step (between idx and idx+1)
       els.steps.appendChild(buildInsertBetweenRow(def, idx + 1));
     });
+  }
+
+  // Helper to safely parse JSON text
+  function safeParseJson(text) {
+    try { return JSON.parse(text); } catch (_) { return null; }
+  }
+
+  // Append type-specific editors to a container for a given step
+  function appendEditorsForStep(step, container) {
+    // ASK
+    if (step.ask != null) {
+      container.appendChild(fieldText('ask', step.ask, (v) => { step.ask = v; }));
+      const saveInit = step.saveAs != null ? String(step.saveAs) : '';
+      container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
+      const kbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
+      const kbField = fieldText('keyboard', kbInit, (v) => {
+        const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+        if (lines.length > 0) step.keyboard = lines; else delete step.keyboard;
+      });
+      container.appendChild(kbField);
+      // verification
+      const verWrap = document.createElement('div'); verWrap.className = 'field';
+      const verLabel = document.createElement('div'); verLabel.className = 'label'; verLabel.textContent = 'verification';
+      const verSel = document.createElement('select');
+      ['', 'strict'].forEach((opt) => { const o = document.createElement('option'); o.value = opt; o.textContent = opt || '(none)'; verSel.appendChild(o); });
+      verSel.value = typeof step.verification === 'string' ? step.verification : '';
+      verSel.style.background = 'rgba(17,24,39,0.6)'; verSel.style.border = '1px solid #1f2937'; verSel.style.color = '#e5e7eb'; verSel.style.borderRadius = '8px'; verSel.style.padding = '4px 6px';
+      verSel.addEventListener('change', () => { const v = verSel.value; if (v) step.verification = v; else delete step.verification; });
+      verWrap.appendChild(verLabel); verWrap.appendChild(verSel);
+      container.appendChild(verWrap);
+      return;
+    }
+
+    // SAY
+        if (step.say != null) {
+      container.appendChild(fieldText('say', step.say, (v) => { step.say = v; }));
+      return;
+    }
+
+    // WAIT
+    if (step.wait != null) {
+      const wrap = document.createElement('div'); wrap.className = 'field';
+      const label = document.createElement('div'); label.className = 'label'; label.textContent = 'seconds';
+      const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.value = String((step.wait && step.wait.seconds) || 0);
+      input.addEventListener('input', () => {
+        const n = Number(input.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0;
+      });
+      wrap.appendChild(label); wrap.appendChild(input); container.appendChild(wrap);
+      return;
+    }
+
+    // LABEL
+    if (step.label != null) {
+      container.appendChild(fieldText('label', step.label, (v) => { step.label = v; }, true));
+      return;
+    }
+
+    // GOTO
+    if (step.goto != null) {
+      container.appendChild(fieldText('goto', step.goto, (v) => { step.goto = v; }, true));
+      return;
+    }
+
+    // TRIGGER
+    if (step.trigger != null) {
+      container.appendChild(fieldText('trigger', step.trigger, (v) => { step.trigger = v; }, true));
+      return;
+    }
+
+    // SET ATTRIBUTES
+    if (step.set_attributes != null) {
+      const wrap = document.createElement('div'); wrap.className = 'field';
+      const label = document.createElement('div'); label.className = 'label'; label.textContent = 'attributes (JSON)';
+      const ta = document.createElement('textarea'); ta.value = JSON.stringify(step.set_attributes || {}, null, 2);
+      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
+      wrap.appendChild(label); wrap.appendChild(ta); container.appendChild(wrap);
+      return;
+    }
+
+    // WEB REQUEST
+    if (step.web_request != null) {
+      const req = step.web_request || {};
+      const urlField = fieldText('url', req.url || '', (v) => { req.url = v; }, true);
+      const methodWrap = document.createElement('div'); methodWrap.className = 'field';
+      const methodLabel = document.createElement('div'); methodLabel.className = 'label'; methodLabel.textContent = 'method';
+      const methodSel = document.createElement('select'); ['GET','POST','PUT','PATCH','DELETE'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; methodSel.appendChild(o); }); methodSel.value = req.method || 'GET';
+      methodSel.style.background = 'rgba(17,24,39,0.6)'; methodSel.style.border = '1px solid #1f2937'; methodSel.style.color = '#e5e7eb'; methodSel.style.borderRadius = '8px'; methodSel.style.padding = '4px 6px';
+      methodSel.addEventListener('change', () => { req.method = methodSel.value; });
+      methodWrap.appendChild(methodLabel); methodWrap.appendChild(methodSel);
+      const bodyWrap = document.createElement('div'); bodyWrap.className = 'field';
+      const bodyLabel = document.createElement('div'); bodyLabel.className = 'label'; bodyLabel.textContent = 'body JSON';
+      const bodyTa = document.createElement('textarea'); bodyTa.value = req.body ? JSON.stringify(req.body, null, 2) : '';
+      bodyTa.addEventListener('blur', () => { const obj = safeParseJson(bodyTa.value); if (obj != null) req.body = obj; else delete req.body; });
+      bodyWrap.appendChild(bodyLabel); bodyWrap.appendChild(bodyTa);
+      const saveField = fieldText('saveAs', req.saveAs || '', (v) => { if (v) req.saveAs = v; else delete req.saveAs; }, true);
+      container.appendChild(urlField); container.appendChild(methodWrap); container.appendChild(bodyWrap); container.appendChild(saveField);
+      step.web_request = req;
+      return;
+    }
+
+    // SCRIPTS
+    if (step.script != null) {
+      const spec = step.script || {};
+      container.appendChild(fieldText('file', spec.file || '', (v) => { spec.file = v; }, true));
+      const wrap = document.createElement('div'); wrap.className = 'field';
+      const label = document.createElement('div'); label.className = 'label'; label.textContent = 'timeoutMs';
+      const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.value = String(spec.timeoutMs || '');
+      input.addEventListener('input', () => { const n = Number(input.value); if (Number.isFinite(n) && n > 0) spec.timeoutMs = n; else delete spec.timeoutMs; });
+      wrap.appendChild(label); wrap.appendChild(input); container.appendChild(wrap);
+      step.script = spec;
+      return;
+    }
+
+    // SHEETS ADD ROW
+    if (step.sheets_add_row != null) {
+      const cfg = step.sheets_add_row || {};
+      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'config (JSON)';
+      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
+      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_add_row = obj; });
+      cfgWrap.appendChild(l); cfgWrap.appendChild(ta); container.appendChild(cfgWrap);
+      const save = String((cfg && cfg.saveAs) || '');
+      container.appendChild(fieldText('saveAs', save, (v) => { const obj = step.sheets_add_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_add_row = obj; }, true));
+      return;
+    }
+
+    // SHEETS FIND ROW
+    if (step.sheets_find_row != null) {
+      const cfg = step.sheets_find_row || {};
+      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'config (JSON)';
+      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
+      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_find_row = obj; });
+      cfgWrap.appendChild(l); cfgWrap.appendChild(ta); container.appendChild(cfgWrap);
+      const save = String((cfg && cfg.saveAs) || '');
+      container.appendChild(fieldText('saveAs', save, (v) => { const obj = step.sheets_find_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_find_row = obj; }, true));
+      return;
+    }
+
+    // SHEETS GET ROW
+    if (step.sheets_get_row != null) {
+      const cfg = step.sheets_get_row || {};
+      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'config (JSON)';
+      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
+      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_get_row = obj; });
+      cfgWrap.appendChild(l); cfgWrap.appendChild(ta); container.appendChild(cfgWrap);
+      const save = String((cfg && cfg.saveAs) || '');
+      container.appendChild(fieldText('saveAs', save, (v) => { const obj = step.sheets_get_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_get_row = obj; }, true));
+      return;
+    }
+
+    // Fallback: details without step_id/filters
+    const details = Object.assign({}, step);
+    try { delete details.step_id; delete details.filters; } catch (_) {}
+    const readOnly = document.createElement('div'); readOnly.className = 'field';
+    const label = document.createElement('div'); label.className = 'label'; label.textContent = 'Details';
+    const val = document.createElement('div'); val.textContent = JSON.stringify(details, null, 2);
+    readOnly.appendChild(label); readOnly.appendChild(val); container.appendChild(readOnly);
   }
 
   function fieldText(labelText, value, onInput, singleLine = false) {

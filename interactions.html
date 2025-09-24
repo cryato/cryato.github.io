@@ -389,7 +389,7 @@
       return used;
     }
 
-function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
+    function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       const wrap = document.createElement('div');
       wrap.className = 'step';
       const head = document.createElement('div');
@@ -408,28 +408,8 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       head.appendChild(buildFiltersEditor(st, editable));
       wrap.appendChild(head);
 
-      if (st.ask != null) {
-        const field = document.createElement('div'); field.className = 'field';
-        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
-  const ta = document.createElement('textarea'); ta.value = String(st.ask || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { st.ask = e.target.value; });
-        field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
-        if (st.saveAs != null) {
-          const f2 = document.createElement('div'); f2.className = 'field';
-          const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
-  const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(st.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { st.saveAs = e.target.value; });
-          f2.appendChild(l2); f2.appendChild(i2); wrap.appendChild(f2);
-        }
-      } else if (st.say != null) {
-        const field = document.createElement('div'); field.className = 'field';
-        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
-  const ta = document.createElement('textarea'); ta.value = String(st.say || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { st.say = e.target.value; });
-        field.appendChild(label); field.appendChild(ta); wrap.appendChild(field);
-      } else {
-        const ro = document.createElement('div'); ro.className = 'field';
-        const l = document.createElement('div'); l.className = 'label'; l.textContent = 'details';
-        const v = document.createElement('div'); v.textContent = JSON.stringify(st);
-        ro.appendChild(l); ro.appendChild(v); wrap.appendChild(ro);
-      }
+      // Append editors for all step types (hide step_id; edit filters via modal)
+      appendEditorsForStep(st, wrap, editable);
 
       // Dimming logic
       const hasLaterExec = (i) => Array.from(executed).some((n) => n > i);
@@ -443,6 +423,144 @@ function buildStepLeftElement(st, idx, executed, gotoUsed, editable) {
       }
       if (dim) wrap.classList.add('dimmed');
       return wrap;
+    }
+
+    // ---- Shared editors for all step types (single interaction view) ----
+    function safeParseJson(text) { try { return JSON.parse(text); } catch (_) { return null; } }
+
+    function appendEditorsForStep(step, container, editable) {
+      // ASK
+      if (step.ask != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
+        const ta = document.createElement('textarea'); ta.value = String(step.ask || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.ask = e.target.value; });
+        field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        const f2 = document.createElement('div'); f2.className = 'field';
+        const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
+        const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.saveAs = v; else delete step.saveAs; });
+        f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        // keyboard
+        const f3 = document.createElement('div'); f3.className = 'field';
+        const l3 = document.createElement('div'); l3.className = 'label'; l3.textContent = 'keyboard';
+        const taKb = document.createElement('textarea'); taKb.value = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : ''; taKb.disabled = !editable; if (editable) taKb.addEventListener('input', (e) => { const lines = String(e.target.value || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0); if (lines.length > 0) step.keyboard = lines; else delete step.keyboard; });
+        f3.appendChild(l3); f3.appendChild(taKb); container.appendChild(f3);
+        // verification
+        const f4 = document.createElement('div'); f4.className = 'field';
+        const l4 = document.createElement('div'); l4.className = 'label'; l4.textContent = 'verification';
+        const verSel = document.createElement('select'); ['','strict'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || '(none)'; verSel.appendChild(o); }); verSel.value = typeof step.verification === 'string' ? step.verification : ''; verSel.style.background = 'rgba(17,24,39,0.6)'; verSel.style.border = '1px solid #1f2937'; verSel.style.color = '#e5e7eb'; verSel.style.borderRadius = '8px'; verSel.style.padding = '4px 6px'; verSel.disabled = !editable; if (editable) verSel.addEventListener('change', () => { const v = verSel.value; if (v) step.verification = v; else delete step.verification; });
+        f4.appendChild(l4); f4.appendChild(verSel); container.appendChild(f4);
+        return;
+      }
+
+      // SAY
+      if (step.say != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
+        const ta = document.createElement('textarea'); ta.value = String(step.say || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.say = e.target.value; });
+        field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        return;
+      }
+
+      // WAIT
+      if (step.wait != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'seconds';
+        const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.value = String((step.wait && step.wait.seconds) || 0); input.disabled = !editable; if (editable) input.addEventListener('input', () => { const n = Number(input.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0; });
+        field.appendChild(label); field.appendChild(input); container.appendChild(field);
+        return;
+      }
+
+      // LABEL
+      if (step.label != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'label';
+        const input = document.createElement('input'); input.type = 'text'; input.value = String(step.label || ''); input.disabled = !editable; if (editable) input.addEventListener('input', (e) => { step.label = e.target.value; });
+        field.appendChild(label); field.appendChild(input); container.appendChild(field);
+        return;
+      }
+
+      // GOTO
+      if (step.goto != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'goto';
+        const input = document.createElement('input'); input.type = 'text'; input.value = String(step.goto || ''); input.disabled = !editable; if (editable) input.addEventListener('input', (e) => { step.goto = e.target.value; });
+        field.appendChild(label); field.appendChild(input); container.appendChild(field);
+        return;
+      }
+
+      // TRIGGER
+      if (step.trigger != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'trigger';
+        const input = document.createElement('input'); input.type = 'text'; input.value = String(step.trigger || ''); input.disabled = !editable; if (editable) input.addEventListener('input', (e) => { step.trigger = e.target.value; });
+        field.appendChild(label); field.appendChild(input); container.appendChild(field);
+        return;
+      }
+
+      // SET ATTRIBUTES
+      if (step.set_attributes != null) {
+        const field = document.createElement('div'); field.className = 'field';
+        const label = document.createElement('div'); label.className = 'label'; label.textContent = 'attributes (JSON)';
+        const ta = document.createElement('textarea'); ta.value = JSON.stringify(step.set_attributes || {}, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
+        field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        return;
+      }
+
+      // WEB REQUEST
+      if (step.web_request != null) {
+        const req = step.web_request || {};
+        // url
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'url'; const i1 = document.createElement('input'); i1.type = 'text'; i1.value = String(req.url || ''); i1.disabled = !editable; if (editable) i1.addEventListener('input', (e) => { req.url = e.target.value; }); f1.appendChild(l1); f1.appendChild(i1); container.appendChild(f1);
+        // method
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'method'; const sel = document.createElement('select'); ['GET','POST','PUT','PATCH','DELETE'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o); }); sel.value = req.method || 'GET'; sel.style.background = 'rgba(17,24,39,0.6)'; sel.style.border = '1px solid #1f2937'; sel.style.color = '#e5e7eb'; sel.style.borderRadius = '8px'; sel.style.padding = '4px 6px'; sel.disabled = !editable; if (editable) sel.addEventListener('change', () => { req.method = sel.value; }); f2.appendChild(l2); f2.appendChild(sel); container.appendChild(f2);
+        // body JSON
+        const f3 = document.createElement('div'); f3.className = 'field'; const l3 = document.createElement('div'); l3.className = 'label'; l3.textContent = 'body JSON'; const ta = document.createElement('textarea'); ta.value = req.body ? JSON.stringify(req.body, null, 2) : ''; ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj != null) req.body = obj; else delete req.body; }); f3.appendChild(l3); f3.appendChild(ta); container.appendChild(f3);
+        // saveAs
+        const f4 = document.createElement('div'); f4.className = 'field'; const l4 = document.createElement('div'); l4.className = 'label'; l4.textContent = 'saveAs'; const i4 = document.createElement('input'); i4.type = 'text'; i4.value = String(req.saveAs || ''); i4.disabled = !editable; if (editable) i4.addEventListener('input', (e) => { const v = e.target.value; if (v) req.saveAs = v; else delete req.saveAs; }); f4.appendChild(l4); f4.appendChild(i4); container.appendChild(f4);
+        step.web_request = req;
+        return;
+      }
+
+      // SCRIPT
+      if (step.script != null) {
+        const spec = step.script || {};
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'file'; const i1 = document.createElement('input'); i1.type = 'text'; i1.value = String(spec.file || ''); i1.disabled = !editable; if (editable) i1.addEventListener('input', (e) => { spec.file = e.target.value; }); f1.appendChild(l1); f1.appendChild(i1); container.appendChild(f1);
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'timeoutMs'; const i2 = document.createElement('input'); i2.type = 'number'; i2.min = '0'; i2.value = String(spec.timeoutMs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', () => { const n = Number(i2.value); if (Number.isFinite(n) && n > 0) spec.timeoutMs = n; else delete spec.timeoutMs; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        step.script = spec;
+        return;
+      }
+
+      // SHEETS ADD ROW
+      if (step.sheets_add_row != null) {
+        const cfg = step.sheets_add_row || {};
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'config (JSON)'; const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_add_row = obj; }); f1.appendChild(l1); f1.appendChild(ta); container.appendChild(f1);
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs'; const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String((cfg && cfg.saveAs) || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.sheets_add_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_add_row = obj; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        return;
+      }
+
+      // SHEETS FIND ROW
+      if (step.sheets_find_row != null) {
+        const cfg = step.sheets_find_row || {};
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'config (JSON)'; const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_find_row = obj; }); f1.appendChild(l1); f1.appendChild(ta); container.appendChild(f1);
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs'; const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String((cfg && cfg.saveAs) || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.sheets_find_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_find_row = obj; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        return;
+      }
+
+      // SHEETS GET ROW
+      if (step.sheets_get_row != null) {
+        const cfg = step.sheets_get_row || {};
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'config (JSON)'; const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_get_row = obj; }); f1.appendChild(l1); f1.appendChild(ta); container.appendChild(f1);
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs'; const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String((cfg && cfg.saveAs) || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.sheets_get_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_get_row = obj; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        return;
+      }
+
+      // Fallback: details without step_id/filters
+      const details = Object.assign({}, step);
+      try { delete details.step_id; delete details.filters; } catch (_) {}
+      const ro = document.createElement('div'); ro.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'details';
+      const v = document.createElement('div'); v.textContent = JSON.stringify(details, null, 2);
+      ro.appendChild(l); ro.appendChild(v); container.appendChild(ro);
     }
 
     // ---- Nested filters: parser, serializer, summary, and modal editor ----
