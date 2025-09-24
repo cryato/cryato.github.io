@@ -260,6 +260,38 @@
       return `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
     }
 
+    // ---- Scripts helpers (single view read + publish save) ----
+    function scriptFileName(flowKey, stepId) { return `script_${flowKey}_${stepId}.js`; }
+    function scriptObjectPath(flowKey, stepId) { return `scripts/${scriptFileName(flowKey, stepId)}`; }
+    function scriptBackupObjectPath(flowKey, stepId, timestampUtc) { return `scripts/backups/script_${flowKey}_${stepId}_${timestampUtc}.js`; }
+    function toScriptObjectPathFromSpec(spec) { const s = String(spec || '').trim(); return s.includes('/') ? s : `scripts/${s}`; }
+    async function fetchScriptCodeFromBucket(objectPath) {
+      try {
+        const { bucket } = getCfg();
+        if (!bucket || !hasValidToken()) return '';
+        const res = await fetch(gcsDownloadUrl(bucket, objectPath), { headers: { Authorization: `Bearer ${oauth.accessToken}` }, cache: 'no-store' });
+        if (!res.ok) return '';
+        return await res.text();
+      } catch (_) { return ''; }
+    }
+    async function hydrateScriptCodesForFlow(def, flowKey) {
+      try {
+        if (!def || !Array.isArray(def.steps)) return;
+        for (const st of def.steps) {
+          if (!st || st.script == null) continue;
+          const spec = st.script;
+          const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
+          const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+          const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
+          if (!objectPath) continue;
+          const code = await fetchScriptCodeFromBucket(objectPath);
+          if (typeof st.script !== 'object' || st.script == null) st.script = {};
+          st.script.code = code;
+          if (!st.script.file) st.script.file = fileSpec || scriptFileName(flowKey, stepId);
+        }
+      } catch (_) {}
+    }
+
     function formatUtcNowForFlow() {
       const d = new Date();
       const pad = (n) => String(n).padStart(2, '0');
@@ -329,6 +361,7 @@
             else if (json && json[key]) def = json[key];
             else def = json;
             flowDoc = { flows: { [key]: def || {} } };
+            try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {}
             ensureFirebaseCookiesFromBucket().catch(() => {});
             return true;
           }
@@ -346,12 +379,13 @@
           const url = new URL(rel, cur);
           const res = await fetch(url.toString(), { cache: 'no-store' });
           if (res.ok) {
-            const json = await res.json();
+          const json = await res.json();
             let def = null;
             if (json && json.flows && json.flows[key]) def = json.flows[key];
             else if (json && json[key]) def = json[key];
             else def = json;
-            flowDoc = { flows: { [key]: def || {} } };
+          flowDoc = { flows: { [key]: def || {} } };
+          try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {}
             return true;
           }
         } catch (_) {}
@@ -364,6 +398,7 @@
           const json = await res.json();
           const def = json && json.flows ? json.flows[key] : null;
           flowDoc = { flows: def ? { [key]: def } : {} };
+          if (def) { try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {} }
           return !!def;
         }
       } catch (_) {}
@@ -535,7 +570,9 @@
       // SCRIPT
       if (step.script != null) {
         const spec = step.script || {};
-        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'file'; const i1 = document.createElement('input'); i1.type = 'text'; i1.value = String(spec.file || ''); i1.disabled = !editable; if (editable) i1.addEventListener('input', (e) => { spec.file = e.target.value; }); f1.appendChild(l1); f1.appendChild(i1); container.appendChild(f1);
+        // code
+        const f0 = document.createElement('div'); f0.className = 'field'; const l0 = document.createElement('div'); l0.className = 'label'; l0.textContent = 'code (JS)'; const ta0 = document.createElement('textarea'); ta0.value = String(spec.code || ''); ta0.disabled = !editable; if (editable) ta0.addEventListener('input', (e) => { spec.code = e.target.value; }); f0.appendChild(l0); f0.appendChild(ta0); container.appendChild(f0);
+        // timeout
         const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'timeoutMs'; const i2 = document.createElement('input'); i2.type = 'number'; i2.min = '0'; i2.value = String(spec.timeoutMs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', () => { const n = Number(i2.value); if (Number.isFinite(n) && n > 0) spec.timeoutMs = n; else delete spec.timeoutMs; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
         step.script = spec;
         return;
@@ -944,10 +981,51 @@
               } catch (_) {}
             }
 
-            // 2) Upload new content (single-flow def)
+            // 2) Upload scripts code when present; create backups only if code changed
             const url = gcsUploadUrl(bucket, mainPath);
             const newTimestampUtc = formatUtcNowForFlow();
             try { flow.updated_at = newTimestampUtc; } catch (_) {}
+            try {
+              const steps = Array.isArray(flow.steps) ? flow.steps : [];
+              const scriptCodesById = new Map();
+              for (const st of steps) {
+                if (!st || st.script == null) continue;
+                const sid = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+                if (!sid) continue;
+                const spec = st.script || {};
+                const code = typeof spec.code === 'string' ? spec.code : '';
+                if (!code) {
+                  st.script = Object.assign({}, spec, { file: scriptFileName(d.flow_key, sid) });
+                  delete st.script.code;
+                  continue;
+                }
+                const objectPath = scriptObjectPath(d.flow_key, sid);
+                let existingText = null;
+                try {
+                  const getRes = await fetch(gcsDownloadUrl(bucket, objectPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+                  if (getRes.ok) existingText = await getRes.text();
+                } catch (_) {}
+                if (existingText != null && existingText !== code) {
+                  const backupPath = scriptBackupObjectPath(d.flow_key, sid, newTimestampUtc);
+                  try { await fetch(gcsUploadUrl(bucket, backupPath), { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: existingText }); } catch (_) {}
+                }
+                try { await fetch(gcsUploadUrl(bucket, objectPath), { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: code }); } catch (_) {}
+                scriptCodesById.set(sid, code);
+                st.script = Object.assign({}, spec, { file: scriptFileName(d.flow_key, sid) });
+                delete st.script.code;
+              }
+              // Restore code in-memory after upload to keep editing experience
+              try {
+                for (const st of steps) {
+                  if (!st || st.script == null) continue;
+                  const sid = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+                  if (sid && scriptCodesById.has(sid)) {
+                    if (typeof st.script !== 'object' || st.script == null) st.script = {};
+                    st.script.code = scriptCodesById.get(sid);
+                  }
+                }
+              } catch (_) {}
+            } catch (_) {}
             // Ensure each step has a unique 8-char step_id before saving
             try {
               const existing = new Set();
