@@ -782,6 +782,19 @@
       }
       left.appendChild(grab);
       left.appendChild(badge);
+      // Optional step name (ASK/SAY only)
+      try {
+        const hasName = (typeof step.name === 'string' && step.name.trim().length > 0);
+        const isAskSay = (step.ask != null || step.say != null);
+        if (isAskSay && hasName) {
+          const nameEl = document.createElement('span');
+          nameEl.style.color = '#e2e8f0';
+          nameEl.style.fontSize = '12px';
+          nameEl.style.marginLeft = '8px';
+          nameEl.textContent = step.name.trim();
+          left.appendChild(nameEl);
+        }
+      } catch (_) {}
       const right = document.createElement('div');
       right.style.display = 'flex';
       right.style.alignItems = 'center';
@@ -816,6 +829,8 @@
   function appendEditorsForStep(step, container) {
     // ASK
     if (step.ask != null) {
+      // name
+      container.appendChild(fieldText('name', typeof step.name === 'string' ? step.name : '', (v) => { if (v) step.name = v; else delete step.name; }, true));
       container.appendChild(fieldText('ask', step.ask, (v) => { step.ask = v; }));
       const saveInit = step.saveAs != null ? String(step.saveAs) : '';
       container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
@@ -840,6 +855,8 @@
 
     // SAY
         if (step.say != null) {
+      // name
+      container.appendChild(fieldText('name', typeof step.name === 'string' ? step.name : '', (v) => { if (v) step.name = v; else delete step.name; }, true));
       container.appendChild(fieldText('say', step.say, (v) => { step.say = v; }));
       return;
     }
