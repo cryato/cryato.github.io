@@ -1970,6 +1970,8 @@
       try { def.updated_at = newTimestampUtc; } catch (_) {}
 
       // 2) For each script step: upload code to scripts/, create backup of previous if code changed, and set file reference; do not store inline code in JSON
+      let stepsForRestore = null;
+      let scriptCodesByIdForRestore = null;
       try {
         const steps = Array.isArray(def.steps) ? def.steps : [];
         const scriptCodesById = new Map();
@@ -2008,17 +2010,9 @@
           st.script = Object.assign({}, spec, { file: fileName });
           try { delete st.script.code; } catch (_) {}
         }
-        // After save, restore code back into in-memory def for editor UX
-        try {
-          for (const st of steps) {
-            if (!st || st.script == null) continue;
-            const sid = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
-            if (sid && scriptCodesById.has(sid)) {
-              if (typeof st.script !== 'object' || st.script == null) st.script = {};
-              st.script.code = scriptCodesById.get(sid);
-            }
-          }
-        } catch (_) {}
+        // Defer restoring code until after we upload sanitized JSON
+        stepsForRestore = steps;
+        scriptCodesByIdForRestore = scriptCodesById;
       } catch (_) {}
 
       // 3) Upload new content (store as single-flow object)
@@ -2059,6 +2053,20 @@
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain; charset=utf-8' },
           body: bodyV
         });
+      } catch (_) {}
+
+      // Restore editor-only inline code back into in-memory def for UX
+      try {
+        if (stepsForRestore && scriptCodesByIdForRestore) {
+          for (const st of stepsForRestore) {
+            if (!st || st.script == null) continue;
+            const sid = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+            if (sid && scriptCodesByIdForRestore.has(sid)) {
+              if (typeof st.script !== 'object' || st.script == null) st.script = {};
+              st.script.code = scriptCodesByIdForRestore.get(sid);
+            }
+          }
+        }
       } catch (_) {}
       alert('Saved to Cloud.');
       try { renderSteps(); } catch (_) {}
