@@ -1756,12 +1756,14 @@
 
     const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'flow key (e.g., orders)';
     const typeSel = document.createElement('select');
-    ;[['chat','Chat (triggered by command)'], ['webhook','Webhook (headless)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
+    ;[['chat','Chat (triggered by command)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
     const triggerInput = document.createElement('input'); triggerInput.type = 'text'; triggerInput.placeholder = '/orders (for chat) or orders (for webhook)';
     const descInput = document.createElement('input'); descInput.type = 'text'; descInput.placeholder = 'optional description';
 
     function updateTriggerPlaceholder() {
-      triggerInput.placeholder = typeSel.value === 'webhook' ? 'orders (webhook name)' : '/orders (Telegram command)';
+      if (typeSel.value === 'webhook') triggerInput.placeholder = 'orders (webhook name)';
+      else if (typeSel.value === 'error_handler') triggerInput.placeholder = '(not used)';
+      else triggerInput.placeholder = '/orders (Telegram command)';
     }
     typeSel.addEventListener('change', updateTriggerPlaceholder);
     updateTriggerPlaceholder();
@@ -1782,7 +1784,7 @@
     btnCreate.addEventListener('click', async () => {
       try {
         const key = String(keyInput.value || '').trim();
-        const type = typeSel.value === 'webhook' ? 'webhook' : 'chat';
+        const type = typeSel.value === 'webhook' ? 'webhook' : (typeSel.value === 'error_handler' ? 'error_handler' : 'chat');
         const trigger = String(triggerInput.value || '').trim();
         const description = String(descInput.value || '').trim();
         if (!key) { alert('Enter a flow key'); return; }
@@ -1794,6 +1796,10 @@
         if (type === 'webhook') {
           def.type = 'webhook';
           def.trigger = trigger || key;
+        } else if (type === 'error_handler') {
+          def.type = 'error_handler';
+          // No trigger; this flow is invoked programmatically with variables
+          def.description = def.description || 'Handles errors from other flows';
         } else {
           def.trigger = trigger || ('/' + key);
           def.steps = [{ say: 'Hello! This is a new flow.' }];

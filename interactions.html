@@ -868,6 +868,26 @@
           meta.textContent = `${formatTimeHM2(when)} · set_attributes`;
           const body = document.createElement('div'); body.textContent = pairs.join(', ');
           line.appendChild(meta); line.appendChild(body);
+        } else if (s.type === 'error') {
+          const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+          meta.textContent = `${formatTimeHM2(when)} · error${idx}`;
+          const body = document.createElement('div');
+          const parts = [];
+          if (s.step_type) parts.push(`type=${s.step_type}`);
+          if (s.error_description) parts.push(`desc=${s.error_description}`);
+          if (s.handler_flow_key) parts.push(`handler=${s.handler_flow_key}`);
+          if (s.child_request_id) {
+            const a = document.createElement('a');
+            a.href = buildUrlWithAuth('interactions', { request_id: s.child_request_id });
+            a.textContent = s.child_request_id;
+            const span = document.createElement('span');
+            span.textContent = ' child=';
+            body.appendChild(span);
+            body.appendChild(a);
+          } else {
+            body.textContent = parts.join(', ');
+          }
+          line.appendChild(meta); line.appendChild(body);
         } else {
           meta.textContent = `${formatTimeHM2(when)} · ${s.type || 'action'}`;
           const body = document.createElement('div'); body.textContent = JSON.stringify(s);
@@ -1167,6 +1187,15 @@
               const time = formatTimeHM(when);
               const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
               line.textContent = `${time} goto -> ${s.label}${idx}`.trim();
+            } else if (s.type === 'error') {
+              const when = s && s.date && typeof s.date.toDate === 'function' ? s.date.toDate() : (s && s.date ? new Date(s.date) : null);
+              const time = formatTimeHM(when);
+              const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
+              const desc = (s && s.error_description) ? String(s.error_description) : '';
+              const stepType = (s && s.step_type) ? String(s.step_type) : '';
+              let extra = '';
+              if (s && s.child_request_id) extra = ` child=${s.child_request_id}`;
+              line.textContent = `${time} error${idx} (${stepType}) ${desc}${extra}`.trim();
             } else {
               line.textContent = JSON.stringify(s);
             }
