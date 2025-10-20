@@ -274,7 +274,21 @@
         return await res.text();
       } catch (_) { return ''; }
     }
-    async function hydrateScriptCodesForFlow(def, flowKey) {
+    async function fetchScriptCodeForVersion(flowKey, stepId, fileSpec, versionTs) {
+      try {
+        const backupPath = (versionTs && stepId) ? scriptBackupObjectPath(flowKey, stepId, versionTs) : '';
+        if (backupPath) {
+          const txt = await fetchScriptCodeFromBucket(backupPath);
+          if (txt && txt.length > 0) return txt;
+        }
+      } catch (_) {}
+      try {
+        const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
+        if (!objectPath) return '';
+        return await fetchScriptCodeFromBucket(objectPath);
+      } catch (_) { return ''; }
+    }
+    async function hydrateScriptCodesForFlow(def, flowKey, versionTs) {
       try {
         if (!def || !Array.isArray(def.steps)) return;
         for (const st of def.steps) {
@@ -282,9 +296,7 @@
           const spec = st.script;
           const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
           const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
-          const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
-          if (!objectPath) continue;
-          const code = await fetchScriptCodeFromBucket(objectPath);
+          const code = await fetchScriptCodeForVersion(flowKey, stepId, fileSpec, versionTs);
           if (typeof st.script !== 'object' || st.script == null) st.script = {};
           st.script.code = code;
           if (!st.script.file) st.script.file = fileSpec || scriptFileName(flowKey, stepId);
@@ -787,6 +799,8 @@
                 if (json && json.flows && json.flows[key]) def = json.flows[key]; else if (json && json[key]) def = json[key]; else def = json;
                 if (def && typeof def === 'object') {
                   flowDoc = { flows: { [key]: def } };
+                  // Hydrate code from scripts backups for this version
+                  try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key, desiredVersion); } catch (_) {}
                 }
               }
             }

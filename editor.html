@@ -302,6 +302,25 @@
       return '';
     }
   }
+  async function fetchScriptCodeForVersion(flowKey, stepId, fileSpec, versionTs) {
+    // Try backup for the version first; then fall back to current script object path
+    try {
+      const backupPath = (versionTs && stepId)
+        ? scriptBackupObjectPath(flowKey, stepId, versionTs)
+        : '';
+      if (backupPath) {
+        const txt = await fetchScriptCodeFromBucket(backupPath);
+        if (txt && txt.length > 0) return txt;
+      }
+    } catch (_) {}
+    try {
+      const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
+      if (!objectPath) return '';
+      return await fetchScriptCodeFromBucket(objectPath);
+    } catch (_) {
+      return '';
+    }
+  }
   async function hydrateScriptCodesForFlow(def, flowKey) {
     try {
       if (!def || !Array.isArray(def.steps)) return;
@@ -313,6 +332,21 @@
         const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
         if (!objectPath) continue;
         const code = await fetchScriptCodeFromBucket(objectPath);
+        if (typeof st.script !== 'object' || st.script == null) st.script = {};
+        st.script.code = code;
+        if (!st.script.file) st.script.file = fileSpec || scriptFileName(flowKey, stepId);
+      }
+    } catch (_) {}
+  }
+  async function hydrateScriptCodesForFlowWithVersion(def, flowKey, versionTs) {
+    try {
+      if (!def || !Array.isArray(def.steps)) return;
+      for (const st of def.steps) {
+        if (!st || st.script == null) continue;
+        const spec = st.script;
+        const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
+        const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+        const code = await fetchScriptCodeForVersion(flowKey, stepId, fileSpec, versionTs);
         if (typeof st.script !== 'object' || st.script == null) st.script = {};
         st.script.code = code;
         if (!st.script.file) st.script.file = fileSpec || scriptFileName(flowKey, stepId);
@@ -521,9 +555,14 @@
       else if (json && json[currentFlowKey]) def = json[currentFlowKey];
       else def = json;
       if (!def || typeof def !== 'object') throw new Error('Invalid version structure');
+      // Parse version timestamp from backup object name
+      const ts = extractTimestampFromBackupName(objectName);
       // Apply to editor state
       if (!flowDoc || !flowDoc.flows) flowDoc = { flows: {} };
       flowDoc.flows[currentFlowKey] = def;
+      // Strip inline code if any, then hydrate using the versioned backup first
+      try { stripInlineScriptCodesForFlow(flowDoc.flows[currentFlowKey]); } catch (_) {}
+      try { await hydrateScriptCodesForFlowWithVersion(flowDoc.flows[currentFlowKey], currentFlowKey, ts); } catch (_) {}
       renderSteps();
     } catch (e) {
       alert('Failed to load version: ' + e.message);
