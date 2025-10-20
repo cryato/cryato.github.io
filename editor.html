@@ -62,6 +62,7 @@
       <a id="lnkConversations" class="btn" href="conversations">Conversations</a>
       <a id="lnkInteractions" class="btn" href="interactions">Interactions</a>
       <button id="btnSignOutHeader" class="btn">Sign out</button>
+      <button id="btnNewFlow" class="btn primary">New flow</button>
       <button id="btnBrowseVersions" class="btn">Browse versions</button>
       <button id="btnPublish" class="btn accent">Publish</button>
     </div>
@@ -122,6 +123,7 @@
     steps: document.getElementById('steps'),
     btnPublish: document.getElementById('btnPublish'),
     btnSignOutHeader: document.getElementById('btnSignOutHeader'),
+    btnNewFlow: document.getElementById('btnNewFlow'),
     btnBrowseVersions: document.getElementById('btnBrowseVersions'),
     fileInput: document.getElementById('fileInput'),
     // Cloud panel
@@ -1734,6 +1736,101 @@
     btnClose.addEventListener('click', () => overlay.remove());
   }
 
+  // ---- Create Flow UI ----
+  function openCreateFlowModal() {
+    const overlay = document.createElement('div'); overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '1000';
+    const dialog = document.createElement('div'); dialog.className = 'panel'; dialog.style.position = 'absolute'; dialog.style.top = '12%'; dialog.style.left = '50%'; dialog.style.transform = 'translateX(-50%)'; dialog.style.width = 'min(720px, 92vw)'; dialog.style.maxHeight = '80vh'; dialog.style.overflow = 'auto'; dialog.style.padding = '12px';
+
+    const header = document.createElement('div'); header.className = 'flow-header';
+    const title = document.createElement('div'); title.className = 'flow-title'; title.textContent = 'Create New Flow';
+    const actions = document.createElement('div'); actions.className = 'toolbar';
+    const btnClose = document.createElement('button'); btnClose.className = 'btn'; btnClose.textContent = 'Close';
+    actions.appendChild(btnClose); header.appendChild(title); header.appendChild(actions);
+
+    const body = document.createElement('div'); body.className = 'steps';
+
+    function row(labelText, inputEl) {
+      const r = document.createElement('div'); r.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = labelText; r.appendChild(l); r.appendChild(inputEl); return r;
+    }
+
+    const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'flow key (e.g., orders)';
+    const typeSel = document.createElement('select');
+    ;[['chat','Chat (triggered by command)'], ['webhook','Webhook (headless)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
+    const triggerInput = document.createElement('input'); triggerInput.type = 'text'; triggerInput.placeholder = '/orders (for chat) or orders (for webhook)';
+    const descInput = document.createElement('input'); descInput.type = 'text'; descInput.placeholder = 'optional description';
+
+    function updateTriggerPlaceholder() {
+      triggerInput.placeholder = typeSel.value === 'webhook' ? 'orders (webhook name)' : '/orders (Telegram command)';
+    }
+    typeSel.addEventListener('change', updateTriggerPlaceholder);
+    updateTriggerPlaceholder();
+
+    body.appendChild(row('key', keyInput));
+    body.appendChild(row('type', typeSel));
+    body.appendChild(row('trigger', triggerInput));
+    body.appendChild(row('description', descInput));
+
+    const footer = document.createElement('div'); footer.className = 'footer';
+    const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'Keys must be letters/numbers/_- and unique.';
+    const buttons = document.createElement('div');
+    const btnCreate = document.createElement('button'); btnCreate.className = 'btn primary'; btnCreate.textContent = 'Create';
+    buttons.appendChild(btnCreate);
+    footer.appendChild(hint); footer.appendChild(buttons);
+
+    btnClose.addEventListener('click', () => overlay.remove());
+    btnCreate.addEventListener('click', async () => {
+      try {
+        const key = String(keyInput.value || '').trim();
+        const type = typeSel.value === 'webhook' ? 'webhook' : 'chat';
+        const trigger = String(triggerInput.value || '').trim();
+        const description = String(descInput.value || '').trim();
+        if (!key) { alert('Enter a flow key'); return; }
+        if (!/^[a-zA-Z0-9_\-]+$/.test(key)) { alert('Key may contain only letters, numbers, _ or -'); return; }
+        if (Array.isArray(flowKeys) && flowKeys.includes(key)) { alert('A flow with this key already exists'); return; }
+
+        // Build minimal definition
+        const def = { description, steps: [] };
+        if (type === 'webhook') {
+          def.type = 'webhook';
+          def.trigger = trigger || key;
+        } else {
+          def.trigger = trigger || ('/' + key);
+          def.steps = [{ say: 'Hello! This is a new flow.' }];
+        }
+
+        // Apply to editor state (merge, do not overwrite other flows)
+        if (!flowDoc || !flowDoc.flows) flowDoc = { flows: {} };
+        flowDoc.flows[key] = def;
+        currentFlowKey = key;
+        // Update list and UI
+        try {
+          if (!Array.isArray(flowKeys)) flowKeys = [];
+          if (!flowKeys.includes(key)) flowKeys.push(key);
+          flowKeys = Array.from(new Set(flowKeys)).sort();
+        } catch (_) {}
+        renderFlows();
+        renderSteps();
+
+        // If signed in, publish immediately to create file and update versions
+        if (hasValidToken()) {
+          await saveCurrentFlowToCloudWithBackup();
+        } else {
+          alert('Flow created locally. Sign in and click Publish to upload and update versions.');
+        }
+        overlay.remove();
+      } catch (e) {
+        alert('Failed to create flow: ' + (e && e.message ? e.message : e));
+      }
+    });
+
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    dialog.appendChild(footer);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+  }
+
   function downloadJson(obj, filename) {
     const json = JSON.stringify(obj, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -1969,6 +2066,7 @@
   });
   els.btnSignOut.addEventListener('click', signOut);
   if (els.btnSignOutHeader) els.btnSignOutHeader.addEventListener('click', signOut);
+  if (els.btnNewFlow) els.btnNewFlow.addEventListener('click', openCreateFlowModal);
   if (els.btnBrowseVersions) els.btnBrowseVersions.addEventListener('click', async () => {
     ensureVersionsPanelVisible(true);
     await loadVersionsFirstPage();
