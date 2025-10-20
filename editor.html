@@ -320,6 +320,18 @@
     } catch (_) {}
   }
 
+  function stripInlineScriptCodesForFlow(def) {
+    try {
+      if (!def || !Array.isArray(def.steps)) return;
+      for (const st of def.steps) {
+        if (!st || st.script == null) continue;
+        if (typeof st.script === 'object' && st.script.code != null) {
+          try { delete st.script.code; } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
   function formatUtcNowForFlow() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -598,6 +610,7 @@
           else if (json && json[key]) def = json[key];
           else def = json;
           flowDoc = { flows: { [key]: def || {} } };
+          try { stripInlineScriptCodesForFlow(flowDoc.flows[key]); } catch (_) {}
           try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {}
           currentFlowKey = key;
           return true;
@@ -621,6 +634,7 @@
           else if (json && json[key]) def = json[key];
           else def = json;
           flowDoc = { flows: { [key]: def || {} } };
+          try { stripInlineScriptCodesForFlow(flowDoc.flows[key]); } catch (_) {}
           try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {}
           currentFlowKey = key;
           return true;
@@ -634,7 +648,10 @@
         const json = await res.json();
         const def = json && json.flows ? json.flows[key] : null;
         flowDoc = { flows: def ? { [key]: def } : {} };
-        if (def) { try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {} }
+        if (def) {
+          try { stripInlineScriptCodesForFlow(flowDoc.flows[key]); } catch (_) {}
+          try { await hydrateScriptCodesForFlow(flowDoc.flows[key], key); } catch (_) {}
+        }
         currentFlowKey = def ? key : null;
         return !!def;
       }
@@ -981,19 +998,29 @@
     // SCRIPTS
     if (step.script != null) {
       const spec = step.script || {};
-      // Code editor
+      const sid = (step && typeof step.step_id === 'string' && step.step_id) ? step.step_id : '';
+      // File path (required for save)
+      const fileWrap = document.createElement('div'); fileWrap.className = 'field';
+      const fileLabel = document.createElement('div'); fileLabel.className = 'label'; fileLabel.textContent = 'file (path)';
+      const fileInput = document.createElement('input'); fileInput.type = 'text'; fileInput.placeholder = sid ? scriptFileName(currentFlowKey || 'flow', sid) : 'script_file.js';
+      fileInput.value = typeof spec.file === 'string' && spec.file ? spec.file : (sid ? scriptFileName(currentFlowKey || 'flow', sid) : (spec.file || ''));
+      fileInput.addEventListener('input', () => { const v = String(fileInput.value || '').trim(); if (!spec || typeof spec !== 'object') step.script = {}; if (v) step.script.file = v; else delete step.script.file; });
+      fileWrap.appendChild(fileLabel); fileWrap.appendChild(fileInput); container.appendChild(fileWrap);
+
+      // Code editor (editor-only; not persisted in JSON)
       const codeWrap = document.createElement('div'); codeWrap.className = 'field';
       const codeLabel = document.createElement('div'); codeLabel.className = 'label'; codeLabel.textContent = 'code (JS)';
       const ta = document.createElement('textarea'); ta.value = String(spec.code || ''); ta.placeholder = 'Paste JS code. Use resolve({ ... }) to return variables.';
-      ta.addEventListener('input', () => { spec.code = ta.value; });
+      ta.addEventListener('input', () => { if (!step.script || typeof step.script !== 'object') step.script = {}; step.script.code = ta.value; });
       codeWrap.appendChild(codeLabel); codeWrap.appendChild(ta); container.appendChild(codeWrap);
+
       // Timeout
       const wrap = document.createElement('div'); wrap.className = 'field';
       const label = document.createElement('div'); label.className = 'label'; label.textContent = 'timeoutMs';
       const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.value = String(spec.timeoutMs || '');
       input.addEventListener('input', () => { const n = Number(input.value); if (Number.isFinite(n) && n > 0) spec.timeoutMs = n; else delete spec.timeoutMs; });
       wrap.appendChild(label); wrap.appendChild(input); container.appendChild(wrap);
-      step.script = spec;
+      step.script = Object.assign({}, spec, { file: fileInput.value || spec.file || (sid ? scriptFileName(currentFlowKey || 'flow', sid) : undefined) });
       return;
     }
 
@@ -1594,8 +1621,10 @@
         formWrap.appendChild(field('config (JSON)', ta));
         formWrap.appendChild(field('saveAs', save));
       } else if (t === 'script') {
-        const code = document.createElement('textarea'); code.placeholder = '// JS code. Call resolve({ key: value }) to return values'; code.style.minHeight = '160px';
+        const file = document.createElement('input'); file.type = 'text'; file.placeholder = 'script file (e.g., script_flow_step.js)';
+        const code = document.createElement('textarea'); code.placeholder = '// JS code (editor-only). Call resolve({ key: value }) to return values'; code.style.minHeight = '160px';
         const timeout = document.createElement('input'); timeout.type = 'number'; timeout.placeholder = 'timeoutMs (optional)'; timeout.min = '0';
+        formWrap.appendChild(field('file', file));
         formWrap.appendChild(field('code', code));
         formWrap.appendChild(field('timeoutMs', timeout));
       } else if (t === 'from_json') {
@@ -1676,11 +1705,18 @@
         step.sheets_get_row = obj || {};
         if (save && save.value) step.sheets_get_row.saveAs = String(save.value);
       } else if (t === 'script') {
+        const inputs = formWrap.querySelectorAll('input');
         const ta = formWrap.querySelector('textarea');
-        const timeout = formWrap.querySelector('input[type="number"]');
-        const spec = { code: String((ta && ta.value) || '') };
+        const fileInput = inputs && inputs[0];
+        const timeout = inputs && inputs[1] && inputs[1].type === 'number' ? inputs[1] : formWrap.querySelector('input[type="number"]');
+        const spec = {};
+        const fileVal = String((fileInput && fileInput.value) || '').trim();
+        if (fileVal) spec.file = fileVal;
         const n = Number(timeout && timeout.value);
         if (Number.isFinite(n) && n > 0) spec.timeoutMs = n;
+        // Keep code only in editor's memory; runtime JSON will strip it on save
+        const codeVal = String((ta && ta.value) || '');
+        if (codeVal) spec.code = codeVal;
         step.script = spec;
       } else if (t === 'from_json') {
         const ta = formWrap.querySelector('textarea');
@@ -1933,7 +1969,7 @@
       const newTimestampUtc = formatUtcNowForFlow();
       try { def.updated_at = newTimestampUtc; } catch (_) {}
 
-      // 2) For each script step: upload code to scripts/, create backup of previous if code changed, and set file reference
+      // 2) For each script step: upload code to scripts/, create backup of previous if code changed, and set file reference; do not store inline code in JSON
       try {
         const steps = Array.isArray(def.steps) ? def.steps : [];
         const scriptCodesById = new Map();
@@ -1943,19 +1979,14 @@
           if (!sid) continue;
           const spec = st.script || {};
           const code = typeof spec.code === 'string' ? spec.code : '';
-          if (!code) {
-            // If no inline code provided, still ensure file points to standard location for runtime
-            st.script = Object.assign({}, spec, { file: scriptFileName(currentFlowKey, sid) });
-            delete st.script.code;
-            continue;
-          }
-          const objectPath = scriptObjectPath(currentFlowKey, sid);
+          const fileName = typeof spec.file === 'string' && spec.file ? spec.file : scriptFileName(currentFlowKey, sid);
+          const objectPath = toScriptObjectPathFromSpec(fileName);
           let existingText = null;
           try {
             const getRes = await fetch(gcsDownloadUrl(bucket, objectPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
             if (getRes.ok) existingText = await getRes.text();
           } catch (_) {}
-          if (existingText != null && existingText !== code) {
+          if (code && existingText != null && existingText !== code) {
             // Backup previous to scripts/backups with current flow version timestamp
             const backupPath = scriptBackupObjectPath(currentFlowKey, sid, newTimestampUtc);
             try {
@@ -1964,16 +1995,18 @@
               });
             } catch (_) {}
           }
-          // Upload new code
-          try {
-            await fetch(gcsUploadUrl(bucket, objectPath), {
-              method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: code
-            });
-          } catch (_) {}
-          scriptCodesById.set(sid, code);
+          // Upload new code only if provided in the editor
+          if (code) {
+            try {
+              await fetch(gcsUploadUrl(bucket, objectPath), {
+                method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: code
+              });
+            } catch (_) {}
+            scriptCodesById.set(sid, code);
+          }
           // Replace inline code with file reference for stored flow
-          st.script = Object.assign({}, spec, { file: scriptFileName(currentFlowKey, sid) });
-          delete st.script.code;
+          st.script = Object.assign({}, spec, { file: fileName });
+          try { delete st.script.code; } catch (_) {}
         }
         // After save, restore code back into in-memory def for editor UX
         try {
