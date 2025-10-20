@@ -888,6 +888,7 @@
           const body = document.createElement('div');
           const parts = [];
           if (s.step_type) parts.push(`type=${s.step_type}`);
+          if (s.failed_request_id) parts.push(`failed=${s.failed_request_id}`);
           if (s.error_description) parts.push(`desc=${s.error_description}`);
           if (s.handler_flow_key) parts.push(`handler=${s.handler_flow_key}`);
           if (s.child_request_id) {
@@ -1207,8 +1208,10 @@
               const idx = Number.isFinite(s.step_index) ? ` · step #${s.step_index}` : '';
               const desc = (s && s.error_description) ? String(s.error_description) : '';
               const stepType = (s && s.step_type) ? String(s.step_type) : '';
+              const failed = (s && s.failed_request_id) ? String(s.failed_request_id) : '';
               let extra = '';
-              if (s && s.child_request_id) extra = ` child=${s.child_request_id}`;
+              if (failed) extra += ` failed=${failed}`;
+              if (s && s.child_request_id) extra += ` child=${s.child_request_id}`;
               line.textContent = `${time} error${idx} (${stepType}) ${desc}${extra}`.trim();
             } else {
               line.textContent = JSON.stringify(s);
