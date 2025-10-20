@@ -64,6 +64,7 @@
       <button id="btnSignOutHeader" class="btn">Sign out</button>
       <button id="btnNewFlow" class="btn primary">New flow</button>
       <button id="btnBrowseVersions" class="btn">Browse versions</button>
+      <button id="btnDeleteFlow" class="btn">Delete flow</button>
       <button id="btnPublish" class="btn accent">Publish</button>
     </div>
   </header>
@@ -125,6 +126,7 @@
     btnSignOutHeader: document.getElementById('btnSignOutHeader'),
     btnNewFlow: document.getElementById('btnNewFlow'),
     btnBrowseVersions: document.getElementById('btnBrowseVersions'),
+    btnDeleteFlow: document.getElementById('btnDeleteFlow'),
     fileInput: document.getElementById('fileInput'),
     // Cloud panel
     btnAuth: document.getElementById('btnAuth'),
@@ -269,6 +271,10 @@
     params.set('prefix', prefix.replace(/^\/*/, ''));
     params.set('fields', 'items(name),nextPageToken');
     return `${base}?${params.toString()}`;
+  }
+
+  function gcsDeleteUrl(bucket, objectPath) {
+    return `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}`;
   }
 
   // ---- Scripts helpers ----
@@ -728,6 +734,10 @@
     els.steps.innerHTML = '';
     const flows = (flowDoc && flowDoc.flows) || {};
     const def = flows[currentFlowKey];
+
+    if (els.btnDeleteFlow) {
+      els.btnDeleteFlow.disabled = !def;
+    }
 
     if (!def) {
       const empty = document.createElement('div');
@@ -2025,6 +2035,84 @@
     }
   }
 
+  async function deleteCurrentFlow() {
+    try {
+      if (!currentFlowKey) { alert('Select a flow first.'); return; }
+      const key = currentFlowKey;
+      const sure = confirm(`Delete flow "${key}"? This will permanently delete flows/${key}.json from the bucket.`);
+      if (!sure) return;
+      const { bucket } = getCfg();
+      if (!bucket) { alert('Please configure Bucket.'); return; }
+      if (!hasValidToken()) { alert('Please sign in first.'); return; }
+      const token = oauth.accessToken;
+      const mainPath = `flows/${key}.json`;
+
+      // Best-effort: back up current content before delete
+      let currentText = null;
+      let previousUpdatedAt = '';
+      try {
+        const getRes = await fetch(gcsDownloadUrl(bucket, mainPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (getRes.ok) currentText = await getRes.text();
+      } catch (_) {}
+      if (currentText != null) {
+        try {
+          const json = JSON.parse(currentText);
+          let prevDef = null;
+          if (json && json.flows && json.flows[key]) prevDef = json.flows[key];
+          else if (json && json[key]) prevDef = json[key];
+          else prevDef = json;
+          if (prevDef && typeof prevDef.updated_at === 'string') previousUpdatedAt = prevDef.updated_at;
+        } catch (_) {}
+        const tsForBackup = previousUpdatedAt || formatUtcNowForFlow();
+        const backupName = formatBackupName(key, tsForBackup);
+        try {
+          await fetch(gcsUploadUrl(bucket, backupName), { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: currentText });
+        } catch (_) {}
+      }
+
+      // Delete the flow object
+      const delRes = await fetch(gcsDeleteUrl(bucket, mainPath), { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (!delRes.ok && delRes.status !== 404) throw new Error('Delete failed');
+
+      // Update versions.txt: remove key
+      try {
+        const versionsPath = 'flows/versions.txt';
+        let existing = '';
+        try {
+          const resV = await fetch(gcsDownloadUrl(bucket, versionsPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+          if (resV.ok) existing = await resV.text();
+        } catch (_) {}
+        const map = {};
+        String(existing || '')
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'))
+          .forEach((line) => {
+            const idx = line.indexOf('=');
+            if (idx <= 0) return;
+            const k = line.slice(0, idx).trim();
+            const v = line.slice(idx + 1).trim();
+            if (k) map[k] = v;
+          });
+        try { delete map[key]; } catch (_) {}
+        const bodyV = Object.entries(map).map(([k, v]) => `${k}=${v}`).join('\n') + (Object.keys(map).length ? '\n' : '');
+        await fetch(gcsUploadUrl(bucket, versionsPath), { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain; charset=utf-8' }, body: bodyV });
+      } catch (_) {}
+
+      // Update local state and UI
+      try { if (flowDoc && flowDoc.flows) delete flowDoc.flows[key]; } catch (_) {}
+      try { flowKeys = (Array.isArray(flowKeys) ? flowKeys.filter((k) => k !== key) : []); } catch (_) {}
+      currentFlowKey = null;
+      ensureVersionsPanelVisible(false);
+      renderFlows();
+      renderSteps();
+      alert('Flow deleted.');
+    } catch (e) {
+      console.error(e);
+      alert('Delete failed: ' + (e && e.message ? e.message : e));
+    }
+  }
+
   function loadStoredTokenOnly() {
     try {
       const stored = JSON.parse(localStorage.getItem('gcs_token') || '{}');
@@ -2077,6 +2165,7 @@
     ensureVersionsPanelVisible(true);
     await loadVersionsFirstPage();
   });
+  if (els.btnDeleteFlow) els.btnDeleteFlow.addEventListener('click', deleteCurrentFlow);
   if (els.btnLoadMoreVersions) els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
   if (els.btnCloseVersions) els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
 
