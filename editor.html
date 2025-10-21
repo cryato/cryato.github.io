@@ -1938,12 +1938,12 @@
   }
 
   async function saveCurrentFlowToCloudWithBackup() {
-    if (!flowDoc || !currentFlowKey) return alert('Select a flow first.');
+    if (!flowDoc || !currentFlowKey) throw new Error('Select a flow first.');
     const def = (flowDoc.flows && flowDoc.flows[currentFlowKey]) || null;
-    if (!def) return alert('Nothing to save.');
+    if (!def) throw new Error('Nothing to save.');
     const { bucket } = getCfg();
-    if (!bucket) return alert('Please configure Bucket.');
-    if (!hasValidToken()) { alert('Please sign in first.'); return; }
+    if (!bucket) throw new Error('Missing bucket');
+    if (!hasValidToken()) { throw new Error('Missing or expired token'); }
     // Ensure each step has a unique 8-char step_id before saving
     try {
       // Apply local deletions before generating IDs and saving
@@ -2107,11 +2107,11 @@
           }
         }
       } catch (_) {}
-      alert('Saved to Cloud.');
       try { renderSteps(); } catch (_) {}
+      return true;
     } catch (e) {
       console.error(e);
-      alert('Save failed: ' + e.message);
+      throw e;
     }
   }
 
@@ -2234,7 +2234,39 @@
     if (file) handleImportFile(file);
     e.target.value = '';
   });
-  els.btnPublish.addEventListener('click', saveCurrentFlowToCloudWithBackup);
+  // Publish button behavior: in-button loading, success checkmark, and throttling
+  if (els.btnPublish && !els.btnPublish.dataset.boundPublish) {
+    els.btnPublish.dataset.boundPublish = '1';
+    let lastPublishClickAt = 0;
+    els.btnPublish.addEventListener('click', async () => {
+      const now = Date.now();
+      if (now - lastPublishClickAt < 1000) return; // prevent double-press within 1s
+      lastPublishClickAt = now;
+
+      try { loadStoredTokenOnly(); } catch (_) {}
+      const prev = els.btnPublish.textContent;
+      els.btnPublish.textContent = 'Saving…';
+      els.btnPublish.disabled = true;
+      let ok = false;
+      try {
+        // Pre-checks to avoid noisy errors
+        if (!flowDoc || !currentFlowKey) throw new Error('Select a flow first.');
+        if (!hasValidToken()) throw new Error('Missing or expired token');
+        const { bucket } = getCfg();
+        if (!bucket) throw new Error('Missing bucket');
+
+        await saveCurrentFlowToCloudWithBackup();
+        ok = true;
+      } catch (err) {
+        console.error('Publish error:', err);
+      }
+      els.btnPublish.textContent = ok ? 'Published ✓' : 'Publish failed';
+      setTimeout(() => {
+        els.btnPublish.textContent = prev;
+        els.btnPublish.disabled = false;
+      }, 1400);
+    });
+  }
   els.btnAuth.addEventListener('click', async () => {
     try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
   });
