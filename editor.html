@@ -885,19 +885,19 @@
         document.querySelectorAll('.insert-row.drop-active').forEach((el) => el.classList.remove('drop-active'));
       });
       const type = step.ask ? 'ask'
-        : (step.say ? 'say'
-        : (step.wait ? 'wait'
-        : (step.label ? 'label'
-        : (step.goto ? 'goto'
-        : (step.trigger ? 'trigger'
-        : (step.set_attributes ? 'set_attributes'
-        : (step.get_attributes ? 'get_attributes'
-        : (step.web_request ? 'web_request'
-        : (step.sheets_add_row ? 'sheets_add_row'
-        : (step.sheets_update_row ? 'sheets_update_row'
-        : (step.sheets_find_row ? 'sheets_find_row'
-        : (step.sheets_get_row ? 'sheets_get_row'
-        : (step.script ? 'script' : 'step'))))))))))));
+        : step.say ? 'say'
+        : step.wait ? 'wait'
+        : step.label ? 'label'
+        : step.goto ? 'goto'
+        : step.trigger ? 'trigger'
+        : step.set_attributes ? 'set_attributes'
+        : step.get_attributes ? 'get_attributes'
+        : step.web_request ? 'web_request'
+        : step.sheets_add_row ? 'sheets_add_row'
+        : step.sheets_update_row ? 'sheets_update_row'
+        : step.sheets_find_row ? 'sheets_find_row'
+        : step.sheets_get_row ? 'sheets_get_row'
+        : step.script ? 'script' : 'step';
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = type.toUpperCase();
