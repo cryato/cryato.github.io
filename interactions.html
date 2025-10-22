@@ -452,9 +452,10 @@
         : (st.set_attributes ? 'set_attributes'
         : (st.web_request ? 'web_request'
         : (st.sheets_add_row ? 'sheets_add_row'
+        : (st.sheets_update_row ? 'sheets_update_row'
         : (st.sheets_find_row ? 'sheets_find_row'
         : (st.sheets_get_row ? 'sheets_get_row'
-        : (st.script ? 'script' : 'step')))))))))));
+        : (st.script ? 'script' : 'step'))))))))))));
       badge.textContent = type.toUpperCase();
       const idxEl = document.createElement('span');
       idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
@@ -631,6 +632,14 @@
         const cfg = step.sheets_add_row || {};
         const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'config (JSON)'; const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_add_row = obj; }); f1.appendChild(l1); f1.appendChild(ta); container.appendChild(f1);
         const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs'; const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String((cfg && cfg.saveAs) || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.sheets_add_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_add_row = obj; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        return;
+      }
+
+      // SHEETS UPDATE ROW
+      if (step.sheets_update_row != null) {
+        const cfg = step.sheets_update_row || {};
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'config (JSON)'; const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_update_row = obj; }); f1.appendChild(l1); f1.appendChild(ta); container.appendChild(f1);
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs'; const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String((cfg && cfg.saveAs) || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.sheets_update_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_update_row = obj; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
         return;
       }
 

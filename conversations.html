@@ -171,9 +171,12 @@
           img.style.display = 'block';
           img.style.marginBottom = '6px';
           body.appendChild(img);
-          const caption = document.createElement('div');
-          caption.textContent = d.contents || '';
-          body.appendChild(caption);
+          const cap = String(d.contents || '').trim();
+          if (cap.length > 0) {
+            const caption = document.createElement('div');
+            caption.textContent = cap;
+            body.appendChild(caption);
+          }
         } else {
           body.textContent = d.contents || '';
         }

@@ -894,6 +894,7 @@
         : (step.get_attributes ? 'get_attributes'
         : (step.web_request ? 'web_request'
         : (step.sheets_add_row ? 'sheets_add_row'
+        : (step.sheets_update_row ? 'sheets_update_row'
         : (step.sheets_find_row ? 'sheets_find_row'
         : (step.sheets_get_row ? 'sheets_get_row'
         : (step.script ? 'script' : 'step'))))))))))));
@@ -1100,6 +1101,19 @@
       cfgWrap.appendChild(l); cfgWrap.appendChild(ta); container.appendChild(cfgWrap);
       const save = String((cfg && cfg.saveAs) || '');
       container.appendChild(fieldText('saveAs', save, (v) => { const obj = step.sheets_add_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_add_row = obj; }, true));
+      return;
+    }
+
+    // SHEETS UPDATE ROW
+    if (step.sheets_update_row != null) {
+      const cfg = step.sheets_update_row || {};
+      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
+      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'config (JSON)';
+      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
+      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.sheets_update_row = obj; });
+      cfgWrap.appendChild(l); cfgWrap.appendChild(ta); container.appendChild(cfgWrap);
+      const save = String((cfg && cfg.saveAs) || '');
+      container.appendChild(fieldText('saveAs', save, (v) => { const obj = step.sheets_update_row || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.sheets_update_row = obj; }, true));
       return;
     }
 
@@ -1611,6 +1625,7 @@
       { v: 'get_attributes', n: 'Get attributes' },
       { v: 'web_request', n: 'Web request' },
       { v: 'sheets_add_row', n: 'Sheets: add row' },
+      { v: 'sheets_update_row', n: 'Sheets: update row' },
       { v: 'sheets_find_row', n: 'Sheets: find row' },
       { v: 'sheets_get_row', n: 'Sheets: get row' },
       { v: 'script', n: 'Run script' },
@@ -1681,6 +1696,11 @@
         formWrap.appendChild(field('saveAs', save));
       } else if (t === 'sheets_add_row') {
         const ta = document.createElement('textarea'); ta.placeholder = '{ "spreadsheetId": "...", "sheet": "Sheet1", "values": {"A": "{{name}}"} }';
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
+        formWrap.appendChild(field('config (JSON)', ta));
+        formWrap.appendChild(field('saveAs', save));
+      } else if (t === 'sheets_update_row') {
+        const ta = document.createElement('textarea'); ta.placeholder = '{ "spreadsheetId": "...", "range": "Sheet1!A:Z", "rowIndex": 5, "cells": { "A": "Alice", "C": 42 } }';
         const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
         formWrap.appendChild(field('config (JSON)', ta));
         formWrap.appendChild(field('saveAs', save));
@@ -1779,6 +1799,11 @@
         const save = formWrap.querySelector('input[type="text"]');
         step.sheets_add_row = obj || {};
         if (save && save.value) step.sheets_add_row.saveAs = String(save.value);
+      } else if (t === 'sheets_update_row') {
+        const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}');
+        const save = formWrap.querySelector('input[type="text"]');
+        step.sheets_update_row = obj || {};
+        if (save && save.value) step.sheets_update_row.saveAs = String(save.value);
       } else if (t === 'sheets_find_row') {
         const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}');
         const save = formWrap.querySelector('input[type="text"]');
