@@ -493,6 +493,11 @@
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'ask';
         const ta = document.createElement('textarea'); ta.value = String(step.ask || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.ask = e.target.value; });
         field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        // photo_url
+        const fPhoto = document.createElement('div'); fPhoto.className = 'field';
+        const lPhoto = document.createElement('div'); lPhoto.className = 'label'; lPhoto.textContent = 'photo_url';
+        const iPhoto = document.createElement('input'); iPhoto.type = 'text'; iPhoto.value = String(step.photo_url || ''); iPhoto.disabled = !editable; if (editable) iPhoto.addEventListener('input', (e) => { const v = e.target.value; if (v) step.photo_url = v; else delete step.photo_url; });
+        fPhoto.appendChild(lPhoto); fPhoto.appendChild(iPhoto); container.appendChild(fPhoto);
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
         const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.saveAs = v; else delete step.saveAs; });
@@ -516,6 +521,11 @@
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'say';
         const ta = document.createElement('textarea'); ta.value = String(step.say || ''); ta.disabled = !editable; if (editable) ta.addEventListener('input', (e) => { step.say = e.target.value; });
         field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        // photo_url
+        const fPhoto2 = document.createElement('div'); fPhoto2.className = 'field';
+        const lPhoto2 = document.createElement('div'); lPhoto2.className = 'label'; lPhoto2.textContent = 'photo_url';
+        const iPhoto2 = document.createElement('input'); iPhoto2.type = 'text'; iPhoto2.value = String(step.photo_url || ''); iPhoto2.disabled = !editable; if (editable) iPhoto2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.photo_url = v; else delete step.photo_url; });
+        fPhoto2.appendChild(lPhoto2); fPhoto2.appendChild(iPhoto2); container.appendChild(fPhoto2);
         // user_id override
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id';

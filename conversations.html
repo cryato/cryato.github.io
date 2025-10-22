@@ -163,7 +163,20 @@
         const req = reqUrl ? `<a href="${reqUrl}">request:${d.request_id}</a>` : '';
         meta.innerHTML = `${ts ? ts.toLocaleString() : ''} · from: ${from}${req ? ' · ' + req : ''}`;
         const body = document.createElement('div');
-        body.textContent = d.contents || '';
+        if (d.type === 'photo' && d.media_url) {
+          const img = document.createElement('img');
+          img.src = d.media_url;
+          img.style.maxWidth = '260px';
+          img.style.borderRadius = '8px';
+          img.style.display = 'block';
+          img.style.marginBottom = '6px';
+          body.appendChild(img);
+          const caption = document.createElement('div');
+          caption.textContent = d.contents || '';
+          body.appendChild(caption);
+        } else {
+          body.textContent = d.contents || '';
+        }
         div.appendChild(meta);
         div.appendChild(body);
         frag.appendChild(div);

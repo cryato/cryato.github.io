@@ -943,6 +943,8 @@
     // ASK
     if (step.ask != null) {
       container.appendChild(fieldText('ask', step.ask, (v) => { step.ask = v; }));
+      const askPhotoInit = step.photo_url != null ? String(step.photo_url) : '';
+      container.appendChild(fieldText('photo_url', askPhotoInit, (v) => { if (v) step.photo_url = v; else delete step.photo_url; }, true));
       const saveInit = step.saveAs != null ? String(step.saveAs) : '';
       container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
       const kbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
@@ -967,6 +969,8 @@
     // SAY
         if (step.say != null) {
       container.appendChild(fieldText('say', step.say, (v) => { step.say = v; }));
+      const sayPhotoInit = step.photo_url != null ? String(step.photo_url) : '';
+      container.appendChild(fieldText('photo_url', sayPhotoInit, (v) => { if (v) step.photo_url = v; else delete step.photo_url; }, true));
       const uidInit = step.user_id != null ? String(step.user_id) : '';
       container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
       return;
