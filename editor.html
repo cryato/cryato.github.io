@@ -53,6 +53,10 @@
     .badge.warn { color: #fecaca; border-color: #7f1d1d; background: rgba(127,29,29,0.25); }
     .insert-row.drop-active .btn { border-color: rgba(34,211,238,0.9); background: linear-gradient(180deg, rgba(34,211,238,0.28) 0%, rgba(34,211,238,0.16) 100%); color: #e0f2fe; }
     .insert-row.drop-active div[style*="height: 1px"] { background: #22d3ee !important; }
+    /* Toasts */
+    .toast { position: fixed; right: 16px; bottom: 16px; max-width: 520px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid #1f2937; background: rgba(17,24,39,0.9); box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03); z-index: 2000; }
+    .toast .msg { font-size: 13px; color: var(--text); }
+    .toast .actions { margin-left: auto; display: flex; gap: 8px; }
   </style>
 </head>
 <body>
@@ -177,6 +181,35 @@
     }
   }
 
+  // Toast helpers
+  function showAuthToast(message, onRetry) {
+    try { const old = document.getElementById('authToast'); if (old) old.remove(); } catch (_) {}
+    const t = document.createElement('div'); t.className = 'toast'; t.id = 'authToast';
+    const msg = document.createElement('div'); msg.className = 'msg'; msg.textContent = message || 'Authentication required to continue.';
+    const actions = document.createElement('div'); actions.className = 'actions';
+    const btnSign = document.createElement('button'); btnSign.className = 'btn primary'; btnSign.textContent = 'Sign in';
+    const btnDismiss = document.createElement('button'); btnDismiss.className = 'btn'; btnDismiss.textContent = 'Dismiss';
+    actions.appendChild(btnDismiss); actions.appendChild(btnSign);
+    t.appendChild(msg); t.appendChild(actions);
+    btnDismiss.addEventListener('click', () => t.remove());
+    btnSign.addEventListener('click', async () => {
+      btnSign.disabled = true; btnSign.textContent = 'Signing in…';
+      try {
+        await getAccessToken(true, { noReload: true });
+        updateAuthStatus();
+        t.remove();
+        if (typeof onRetry === 'function') {
+          try { await onRetry(); } catch (_) {}
+        }
+      } catch (e) {
+        btnSign.disabled = false; btnSign.textContent = 'Sign in';
+        alert('Auth failed: ' + (e && e.message ? e.message : e));
+      }
+    });
+    document.body.appendChild(t);
+    return t;
+  }
+
   function ensureGsiScript() {
     return new Promise((resolve) => {
       if (gsiLoaded) return resolve();
@@ -188,7 +221,7 @@
     });
   }
 
-  async function getAccessToken(force = false) {
+  async function getAccessToken(force = false, opts = {}) {
     if (!oauth.clientId) throw new Error('Missing OAuth Client ID');
     const stillValid = oauth.accessToken && Date.now() < oauth.tokenExpiresAt - 5000;
     if (stillValid && !force) return oauth.accessToken;
@@ -216,8 +249,8 @@
                 updateAuthStatus();
                 // Set Firebase cookies from firebase_config.json in the bucket for other pages
                 ensureFirebaseCookiesFromBucket().catch(() => {});
-                // After successful sign-in, clean URL if it has params
-                if (force && window.location.search && window.location.search.length > 1) {
+                // After successful sign-in, clean URL if it has params (unless explicitly suppressed)
+                if (force && !opts.noReload && window.location.search && window.location.search.length > 1) {
                   const clean = window.location.origin + window.location.pathname;
                   // Use replace to avoid back button pollution
                   window.location.replace(clean);
@@ -1649,15 +1682,19 @@
       if (t === 'say') {
         const ta = document.createElement('textarea');
         ta.placeholder = 'Message text (supports {{variables}})';
+        const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
         formWrap.appendChild(field('say', ta));
+        formWrap.appendChild(field('photo_url', url));
         formWrap.appendChild(field('user_id', uid));
       } else if (t === 'ask') {
         const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
+        const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
         const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'Variable name (saveAs)';
         const kb = document.createElement('textarea'); kb.placeholder = 'Keyboard options (one per line, optional)';
         const ver = document.createElement('select'); ['','strict'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || '(none)'; ver.appendChild(o); });
         formWrap.appendChild(field('ask', ta));
+        formWrap.appendChild(field('photo_url', url));
         formWrap.appendChild(field('saveAs', save));
         formWrap.appendChild(field('keyboard', kb));
         formWrap.appendChild(field('verification', ver));
@@ -2068,12 +2105,15 @@
         } catch (_) {}
         const tsForBackup = previousUpdatedAt || formatUtcNowForFlow();
         const backupName = formatBackupName(currentFlowKey, tsForBackup);
-        const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
+      const upBackup = await fetch(gcsUploadUrl(bucket, backupName), {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: currentText
         });
-        if (!upBackup.ok) console.warn('Backup upload failed');
+      if (!upBackup.ok) {
+        if (upBackup.status === 401 || upBackup.status === 403) throw new Error('401');
+        console.warn('Backup upload failed');
+      }
       }
       // Prepare new timestamp for this save (also used for script backups when code changes)
       const newTimestampUtc = formatUtcNowForFlow();
@@ -2102,17 +2142,19 @@
             // Backup previous to scripts/backups with current flow version timestamp
             const backupPath = scriptBackupObjectPath(currentFlowKey, sid, newTimestampUtc);
             try {
-              await fetch(gcsUploadUrl(bucket, backupPath), {
+              const resBU = await fetch(gcsUploadUrl(bucket, backupPath), {
                 method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: existingText
               });
+              if (!resBU.ok && (resBU.status === 401 || resBU.status === 403)) throw new Error('401');
             } catch (_) {}
           }
           // Upload new code only if provided in the editor
           if (code) {
             try {
-              await fetch(gcsUploadUrl(bucket, objectPath), {
+              const resSC = await fetch(gcsUploadUrl(bucket, objectPath), {
                 method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: code
               });
+              if (!resSC.ok && (resSC.status === 401 || resSC.status === 403)) throw new Error('401');
             } catch (_) {}
             scriptCodesById.set(sid, code);
           }
@@ -2132,7 +2174,10 @@
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: newBody
       });
-      if (!upMain.ok) throw new Error('Upload failed');
+      if (!upMain.ok) {
+        if (upMain.status === 401 || upMain.status === 403) throw new Error('401');
+        throw new Error('Upload failed');
+      }
 
       // 4) Update versions file within flows prefix (flows/versions.txt)
       try {
@@ -2158,11 +2203,12 @@
           });
         map[currentFlowKey] = newTimestampUtc;
         const bodyV = Object.entries(map).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
-        await fetch(gcsUploadUrl(bucket, versionsPath), {
+        const resVUp = await fetch(gcsUploadUrl(bucket, versionsPath), {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain; charset=utf-8' },
           body: bodyV
         });
+        if (!resVUp.ok && (resVUp.status === 401 || resVUp.status === 403)) throw new Error('401');
       } catch (_) {}
 
       // Restore editor-only inline code back into in-memory def for UX
@@ -2182,6 +2228,11 @@
       return true;
     } catch (e) {
       console.error(e);
+      // Normalize auth errors to include 401 text for upstream detection
+      const msg = (e && e.message) || '';
+      if (msg === '401' || /401|unauthorized|auth/i.test(msg)) {
+        throw new Error('401');
+      }
       throw e;
     }
   }
@@ -2322,11 +2373,27 @@
       try {
         // Pre-checks to avoid noisy errors
         if (!flowDoc || !currentFlowKey) throw new Error('Select a flow first.');
-        if (!hasValidToken()) throw new Error('Missing or expired token');
+        if (!hasValidToken()) {
+          // Prompt sign-in via toast and then retry publish without reloading the page
+          showAuthToast('Your session expired. Please sign in to publish.', async () => {
+            // Retry publish once after successful sign-in
+            els.btnPublish.click();
+          });
+          return;
+        }
         const { bucket } = getCfg();
         if (!bucket) throw new Error('Missing bucket');
 
-        await saveCurrentFlowToCloudWithBackup();
+        try {
+          await saveCurrentFlowToCloudWithBackup();
+        } catch (e) {
+          // If backend returns 401 within save, surface toast sign-in
+          if (String(e && e.message || '').toLowerCase().includes('token') || String(e && e.message || '').toLowerCase().includes('401')) {
+            showAuthToast('Authentication failed. Sign in to continue.', async () => { els.btnPublish.click(); });
+            return;
+          }
+          throw e;
+        }
         ok = true;
       } catch (err) {
         console.error('Publish error:', err);
@@ -2339,7 +2406,7 @@
     });
   }
   els.btnAuth.addEventListener('click', async () => {
-    try { await getAccessToken(true); } catch (e) { alert('Auth failed: ' + e.message); }
+    try { await getAccessToken(true, { noReload: true }); } catch (e) { alert('Auth failed: ' + e.message); }
   });
   els.btnSignOut.addEventListener('click', signOut);
   if (els.btnSignOutHeader) els.btnSignOutHeader.addEventListener('click', signOut);
