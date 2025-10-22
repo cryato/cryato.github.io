@@ -1009,11 +1009,17 @@
       const wrap = document.createElement('div'); wrap.className = 'field';
       const label = document.createElement('div'); label.className = 'label'; label.textContent = 'attributes (JSON)';
       const ta = document.createElement('textarea'); ta.value = JSON.stringify(step.set_attributes || {}, null, 2);
+      // Update step on input when JSON becomes valid; also on blur
+      ta.addEventListener('input', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
       ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
       wrap.appendChild(label); wrap.appendChild(ta); container.appendChild(wrap);
-      // Optional target user_id
-      const uidInit = step.user_id != null ? String(step.user_id) : '';
-      container.appendChild(fieldText('user_id (optional)', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
+      // Optional target user_id (nested in set_attributes)
+      const uidInit = step.set_attributes && step.set_attributes.user_id != null ? String(step.set_attributes.user_id) : '';
+      container.appendChild(fieldText('user_id (optional)', uidInit, (v) => {
+        const obj = step.set_attributes || {};
+        if (v) obj.user_id = v; else delete obj.user_id;
+        step.set_attributes = obj;
+      }, true));
       return;
     }
 
