@@ -891,11 +891,12 @@
         : (step.goto ? 'goto'
         : (step.trigger ? 'trigger'
         : (step.set_attributes ? 'set_attributes'
+        : (step.get_attributes ? 'get_attributes'
         : (step.web_request ? 'web_request'
         : (step.sheets_add_row ? 'sheets_add_row'
         : (step.sheets_find_row ? 'sheets_find_row'
         : (step.sheets_get_row ? 'sheets_get_row'
-        : (step.script ? 'script' : 'step')))))))))));
+        : (step.script ? 'script' : 'step'))))))))))));
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = type.toUpperCase();
@@ -1010,6 +1011,22 @@
       const ta = document.createElement('textarea'); ta.value = JSON.stringify(step.set_attributes || {}, null, 2);
       ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
       wrap.appendChild(label); wrap.appendChild(ta); container.appendChild(wrap);
+      // Optional target user_id
+      const uidInit = step.user_id != null ? String(step.user_id) : '';
+      container.appendChild(fieldText('user_id (optional)', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
+      return;
+    }
+
+    // GET ATTRIBUTES
+    if (step.get_attributes != null) {
+      const saveInit = step.get_attributes && step.get_attributes.saveAs ? String(step.get_attributes.saveAs) : '';
+      container.appendChild(fieldText('saveAs', saveInit, (v) => {
+        const obj = step.get_attributes || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.get_attributes = obj;
+      }, true));
+      const uidInit = step.get_attributes && step.get_attributes.user_id != null ? String(step.get_attributes.user_id) : '';
+      container.appendChild(fieldText('user_id (optional)', uidInit, (v) => {
+        const obj = step.get_attributes || {}; if (v) obj.user_id = v; else delete obj.user_id; step.get_attributes = obj;
+      }, true));
       return;
     }
 
@@ -1581,6 +1598,7 @@
       { v: 'goto', n: 'Goto (jump to label)' },
       { v: 'trigger', n: 'Trigger another flow' },
       { v: 'set_attributes', n: 'Set attributes' },
+      { v: 'get_attributes', n: 'Get attributes' },
       { v: 'web_request', n: 'Web request' },
       { v: 'sheets_add_row', n: 'Sheets: add row' },
       { v: 'sheets_find_row', n: 'Sheets: find row' },
@@ -1634,7 +1652,14 @@
         formWrap.appendChild(field('user_id', uid));
       } else if (t === 'set_attributes') {
         const ta = document.createElement('textarea'); ta.placeholder = '{ "name": "{{name}}" }';
+        const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
         formWrap.appendChild(field('attributes (JSON object)', ta));
+        formWrap.appendChild(field('user_id', uid));
+      } else if (t === 'get_attributes') {
+        const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'Variable name (saveAs)';
+        const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
+        formWrap.appendChild(field('saveAs', save));
+        formWrap.appendChild(field('user_id', uid));
       } else if (t === 'web_request') {
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'https://api.example.com';
         const method = document.createElement('select'); ['GET','POST','PUT','PATCH','DELETE'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; method.appendChild(o); });
@@ -1719,7 +1744,18 @@
         step.trigger = String((trg && trg.value) || '');
         if (uid && uid.value) step.user_id = String(uid.value);
       } else if (t === 'set_attributes') {
-        const ta = formWrap.querySelector('textarea'); const obj = parseJsonSafe(ta && ta.value || '{}'); step.set_attributes = obj || {};
+        const ta = formWrap.querySelector('textarea'); const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const uid = inputs && inputs[0];
+        const obj = parseJsonSafe(ta && ta.value || '{}');
+        if (uid && uid.value) obj.user_id = String(uid.value);
+        step.set_attributes = obj || {};
+      } else if (t === 'get_attributes') {
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const save = inputs && inputs[0];
+        const uid = inputs && inputs[1];
+        step.get_attributes = {};
+        if (save && save.value) step.get_attributes.saveAs = String(save.value);
+        if (uid && uid.value) step.get_attributes.user_id = String(uid.value);
       } else if (t === 'web_request') {
         const inputs = formWrap.querySelectorAll('input'); const url = inputs[0]; const save = inputs[1];
         const method = formWrap.querySelector('select'); const body = formWrap.querySelector('textarea');

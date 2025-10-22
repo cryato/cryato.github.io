@@ -571,6 +571,19 @@
         const label = document.createElement('div'); label.className = 'label'; label.textContent = 'attributes (JSON)';
         const ta = document.createElement('textarea'); ta.value = JSON.stringify(step.set_attributes || {}, null, 2); ta.disabled = !editable; if (editable) ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
         field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        // Optional user_id to target another user
+        const f2 = document.createElement('div'); f2.className = 'field';
+        const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id (optional)';
+        const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.user_id || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.user_id = v; else delete step.user_id; });
+        f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        return;
+      }
+
+      // GET ATTRIBUTES
+      if (step.get_attributes != null) {
+        const cfg = step.get_attributes || {};
+        const f1 = document.createElement('div'); f1.className = 'field'; const l1 = document.createElement('div'); l1.className = 'label'; l1.textContent = 'saveAs'; const i1 = document.createElement('input'); i1.type = 'text'; i1.value = String(cfg.saveAs || ''); i1.disabled = !editable; if (editable) i1.addEventListener('input', (e) => { const v = e.target.value; const obj = step.get_attributes || {}; if (v) obj.saveAs = v; else delete obj.saveAs; step.get_attributes = obj; }); f1.appendChild(l1); f1.appendChild(i1); container.appendChild(f1);
+        const f2 = document.createElement('div'); f2.className = 'field'; const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id (optional)'; const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(cfg.user_id || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.get_attributes || {}; if (v) obj.user_id = v; else delete obj.user_id; step.get_attributes = obj; }); f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
         return;
       }
 
