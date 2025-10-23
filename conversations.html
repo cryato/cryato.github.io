@@ -163,14 +163,25 @@
         const req = reqUrl ? `<a href="${reqUrl}">request:${d.request_id}</a>` : '';
         meta.innerHTML = `${ts ? ts.toLocaleString() : ''} · from: ${from}${req ? ' · ' + req : ''}`;
         const body = document.createElement('div');
-        if (d.type === 'photo' && d.media_url) {
-          const img = document.createElement('img');
-          img.src = d.media_url;
-          img.style.maxWidth = '260px';
-          img.style.borderRadius = '8px';
-          img.style.display = 'block';
-          img.style.marginBottom = '6px';
-          body.appendChild(img);
+        if ((d.type === 'photo' || d.type === 'video') && d.media_url) {
+          if (d.type === 'video') {
+            const video = document.createElement('video');
+            video.src = d.media_url;
+            video.controls = true;
+            video.style.maxWidth = '260px';
+            video.style.borderRadius = '8px';
+            video.style.display = 'block';
+            video.style.marginBottom = '6px';
+            body.appendChild(video);
+          } else {
+            const img = document.createElement('img');
+            img.src = d.media_url;
+            img.style.maxWidth = '260px';
+            img.style.borderRadius = '8px';
+            img.style.display = 'block';
+            img.style.marginBottom = '6px';
+            body.appendChild(img);
+          }
           const cap = String(d.contents || '').trim();
           if (cap.length > 0) {
             const caption = document.createElement('div');

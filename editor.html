@@ -1005,6 +1005,8 @@
       container.appendChild(fieldText('say', step.say, (v) => { step.say = v; }));
       const sayPhotoInit = step.photo_url != null ? String(step.photo_url) : '';
       container.appendChild(fieldText('photo_url', sayPhotoInit, (v) => { if (v) step.photo_url = v; else delete step.photo_url; }, true));
+      const sayVideoInit = step.video_url != null ? String(step.video_url) : '';
+      container.appendChild(fieldText('video_url', sayVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
       const uidInit = step.user_id != null ? String(step.user_id) : '';
       container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
       return;
@@ -1683,9 +1685,11 @@
         const ta = document.createElement('textarea');
         ta.placeholder = 'Message text (supports {{variables}})';
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
+        const url2 = document.createElement('input'); url2.type = 'text'; url2.placeholder = 'video_url (optional, supports {{variables}})';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
         formWrap.appendChild(field('say', ta));
         formWrap.appendChild(field('photo_url', url));
+        formWrap.appendChild(field('video_url', url2));
         formWrap.appendChild(field('user_id', uid));
       } else if (t === 'ask') {
         const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
@@ -1785,7 +1789,11 @@
       if (t === 'say') {
         step.say = String((q('textarea') || {}).value || '');
         const inputs = formWrap.querySelectorAll('input[type="text"]');
-        const uid = inputs && inputs[0];
+        const photo = inputs && inputs[0];
+        const video = inputs && inputs[1];
+        const uid = inputs && inputs[2];
+        if (photo && photo.value) step.photo_url = String(photo.value);
+        if (video && video.value) step.video_url = String(video.value);
         if (uid && uid.value) step.user_id = String(uid.value);
       } else if (t === 'ask') {
         const ta = q('textarea'); const save = formWrap.querySelector('input[type="text"]');

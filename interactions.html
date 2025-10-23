@@ -527,6 +527,11 @@
         const lPhoto2 = document.createElement('div'); lPhoto2.className = 'label'; lPhoto2.textContent = 'photo_url';
         const iPhoto2 = document.createElement('input'); iPhoto2.type = 'text'; iPhoto2.value = String(step.photo_url || ''); iPhoto2.disabled = !editable; if (editable) iPhoto2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.photo_url = v; else delete step.photo_url; });
         fPhoto2.appendChild(lPhoto2); fPhoto2.appendChild(iPhoto2); container.appendChild(fPhoto2);
+        // video_url
+        const fVideo2 = document.createElement('div'); fVideo2.className = 'field';
+        const lVideo2 = document.createElement('div'); lVideo2.className = 'label'; lVideo2.textContent = 'video_url';
+        const iVideo2 = document.createElement('input'); iVideo2.type = 'text'; iVideo2.value = String(step.video_url || ''); iVideo2.disabled = !editable; if (editable) iVideo2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.video_url = v; else delete step.video_url; });
+        fVideo2.appendChild(lVideo2); fVideo2.appendChild(iVideo2); container.appendChild(fVideo2);
         // user_id override
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id';
