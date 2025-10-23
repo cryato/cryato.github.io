@@ -1007,6 +1007,12 @@
       container.appendChild(fieldText('photo_url', sayPhotoInit, (v) => { if (v) step.photo_url = v; else delete step.photo_url; }, true));
       const sayVideoInit = step.video_url != null ? String(step.video_url) : '';
       container.appendChild(fieldText('video_url', sayVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
+      const sayKbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
+      const sayKbField = fieldText('keyboard', sayKbInit, (v) => {
+        const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+        if (lines.length > 0) step.keyboard = lines; else delete step.keyboard;
+      });
+      container.appendChild(sayKbField);
       const uidInit = step.user_id != null ? String(step.user_id) : '';
       container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
       return;
@@ -1687,10 +1693,12 @@
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
         const url2 = document.createElement('input'); url2.type = 'text'; url2.placeholder = 'video_url (optional, supports {{variables}})';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
+        const kb = document.createElement('textarea'); kb.placeholder = 'keyboard (optional; one per line; hidden settings in [..])';
         formWrap.appendChild(field('say', ta));
         formWrap.appendChild(field('photo_url', url));
         formWrap.appendChild(field('video_url', url2));
         formWrap.appendChild(field('user_id', uid));
+        formWrap.appendChild(field('keyboard', kb));
       } else if (t === 'ask') {
         const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
@@ -1795,6 +1803,11 @@
         if (photo && photo.value) step.photo_url = String(photo.value);
         if (video && video.value) step.video_url = String(video.value);
         if (uid && uid.value) step.user_id = String(uid.value);
+        const kbEl = formWrap.querySelector('textarea:nth-of-type(2)');
+        if (kbEl && kbEl.value) {
+          const lines = String(kbEl.value || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+          if (lines.length > 0) step.keyboard = lines;
+        }
       } else if (t === 'ask') {
         const ta = q('textarea'); const save = formWrap.querySelector('input[type="text"]');
         const areas = formWrap.querySelectorAll('textarea');

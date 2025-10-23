@@ -532,6 +532,11 @@
         const lVideo2 = document.createElement('div'); lVideo2.className = 'label'; lVideo2.textContent = 'video_url';
         const iVideo2 = document.createElement('input'); iVideo2.type = 'text'; iVideo2.value = String(step.video_url || ''); iVideo2.disabled = !editable; if (editable) iVideo2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.video_url = v; else delete step.video_url; });
         fVideo2.appendChild(lVideo2); fVideo2.appendChild(iVideo2); container.appendChild(fVideo2);
+        // keyboard
+        const fKb = document.createElement('div'); fKb.className = 'field';
+        const lKb = document.createElement('div'); lKb.className = 'label'; lKb.textContent = 'keyboard';
+        const taKb2 = document.createElement('textarea'); taKb2.value = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : ''; taKb2.disabled = !editable; if (editable) taKb2.addEventListener('input', (e) => { const lines = String(e.target.value || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0); if (lines.length > 0) step.keyboard = lines; else delete step.keyboard; });
+        fKb.appendChild(lKb); fKb.appendChild(taKb2); container.appendChild(fKb);
         // user_id override
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id';
