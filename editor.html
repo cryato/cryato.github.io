@@ -1677,6 +1677,7 @@
       { v: 'say', n: 'Say (bot message)' },
       { v: 'ask', n: 'Ask (await user answer)' },
       { v: 'wait', n: 'Wait' },
+      { v: 'schedule', n: 'Schedule (pause until time in timezone)' },
       { v: 'label', n: 'Label' },
       { v: 'goto', n: 'Goto (jump to label)' },
       { v: 'trigger', n: 'Trigger another flow' },
@@ -1731,6 +1732,20 @@
       } else if (t === 'wait') {
         const secs = document.createElement('input'); secs.type = 'number'; secs.placeholder = 'Seconds'; secs.min = '0';
         formWrap.appendChild(field('seconds', secs));
+      } else if (t === 'schedule') {
+        const time = document.createElement('input'); time.type = 'text'; time.placeholder = 'HH:MM (supports {{variables}})';
+        const tz = document.createElement('input'); tz.type = 'text'; tz.placeholder = 'IANA timezone (e.g., Europe/Berlin; supports {{variables}})';
+        const date = document.createElement('input'); date.type = 'text'; date.placeholder = 'dd.mm.yyyy (optional; supports {{variables}})';
+        const recur = document.createElement('input'); recur.type = 'checkbox';
+        const recurRow = document.createElement('div'); recurRow.style.display = 'flex'; recurRow.style.alignItems = 'center'; recurRow.style.gap = '8px';
+        const recurLbl = document.createElement('span'); recurLbl.textContent = 'recurring (daily)';
+        recurRow.appendChild(recurLbl); recurRow.appendChild(recur);
+        formWrap.appendChild(field('time', time));
+        formWrap.appendChild(field('timezone', tz));
+        formWrap.appendChild(field('date', date));
+        const wrap = document.createElement('div'); wrap.className = 'field';
+        const l = document.createElement('div'); l.className = 'label'; l.textContent = '';
+        wrap.appendChild(l); wrap.appendChild(recurRow); formWrap.appendChild(wrap);
       } else if (t === 'label') {
         const i = document.createElement('input'); i.type = 'text'; i.placeholder = 'Label name';
         formWrap.appendChild(field('label', i));
@@ -1839,6 +1854,18 @@
         const secs = formWrap.querySelector('input[type="number"]');
         const n = Number(secs && secs.value);
         step.wait = Number.isFinite(n) ? { seconds: n } : { seconds: 1 };
+      } else if (t === 'schedule') {
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const time = inputs && inputs[0];
+        const tz = inputs && inputs[1];
+        const date = inputs && inputs[2];
+        const recur = formWrap.querySelector('input[type="checkbox"]');
+        const cfg = {};
+        if (time && time.value) cfg.time = String(time.value);
+        if (tz && tz.value) cfg.timezone = String(tz.value);
+        if (date && date.value) cfg.date = String(date.value);
+        if (recur && recur.checked) cfg.recurring = true;
+        step.schedule = cfg;
       } else if (t === 'label') {
         const i = formWrap.querySelector('input[type="text"]'); step.label = String((i && i.value) || 'label');
       } else if (t === 'goto') {
