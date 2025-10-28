@@ -594,6 +594,14 @@
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id';
         const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.user_id || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.user_id = v; else delete step.user_id; });
         f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        // optional variables JSON
+        const f3 = document.createElement('div'); f3.className = 'field';
+        const l3 = document.createElement('div'); l3.className = 'label'; l3.textContent = 'variables (JSON, optional)';
+        const ta3 = document.createElement('textarea'); ta3.value = (step && typeof step.variables === 'object') ? JSON.stringify(step.variables, null, 2) : ''; ta3.disabled = !editable; if (editable) {
+          ta3.addEventListener('input', () => { const obj = safeParseJson(ta3.value); if (obj && typeof obj === 'object') step.variables = obj; else if (!ta3.value.trim()) delete step.variables; });
+          ta3.addEventListener('blur', () => { const obj = safeParseJson(ta3.value); if (obj && typeof obj === 'object') step.variables = obj; });
+        }
+        f3.appendChild(l3); f3.appendChild(ta3); container.appendChild(f3);
         return;
       }
 

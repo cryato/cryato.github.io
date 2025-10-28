@@ -1082,6 +1082,15 @@
       container.appendChild(fieldText('trigger', step.trigger, (v) => { step.trigger = v; }, true));
       const uidInit = step.user_id != null ? String(step.user_id) : '';
       container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
+      // Optional variables JSON for child flow initial variables
+      const varsWrap = document.createElement('div'); varsWrap.className = 'field';
+      const varsLabel = document.createElement('div'); varsLabel.className = 'label'; varsLabel.textContent = 'variables (JSON, optional)';
+      const varsTa = document.createElement('textarea'); varsTa.value = (step && typeof step.variables === 'object') ? JSON.stringify(step.variables, null, 2) : '';
+      varsTa.addEventListener('input', () => {
+        const obj = safeParseJson(varsTa.value);
+        if (obj && typeof obj === 'object') step.variables = obj; else if (!varsTa.value.trim()) delete step.variables;
+      });
+      varsWrap.appendChild(varsLabel); varsWrap.appendChild(varsTa); container.appendChild(varsWrap);
       return;
     }
 
@@ -1776,8 +1785,10 @@
       } else if (t === 'trigger') {
         const i = document.createElement('input'); i.type = 'text'; i.placeholder = 'Flow key or /trigger';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
+        const vars = document.createElement('textarea'); vars.placeholder = '{ "foo": "{{bar}}" } (optional)';
         formWrap.appendChild(field('trigger', i));
         formWrap.appendChild(field('user_id', uid));
+        formWrap.appendChild(field('variables (JSON)', vars));
       } else if (t === 'set_attributes') {
         const ta = document.createElement('textarea'); ta.placeholder = '{ "name": "{{name}}" }';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
@@ -1900,8 +1911,13 @@
         const inputs = formWrap.querySelectorAll('input[type="text"]');
         const trg = inputs && inputs[0];
         const uid = inputs && inputs[1];
+        const varsTa = formWrap.querySelector('textarea');
         step.trigger = String((trg && trg.value) || '');
         if (uid && uid.value) step.user_id = String(uid.value);
+        if (varsTa && varsTa.value && varsTa.value.trim()) {
+          const obj = parseJsonSafe(varsTa.value);
+          if (obj && typeof obj === 'object') step.variables = obj;
+        }
       } else if (t === 'set_attributes') {
         const ta = formWrap.querySelector('textarea'); const inputs = formWrap.querySelectorAll('input[type="text"]');
         const uid = inputs && inputs[0];
