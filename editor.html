@@ -930,6 +930,7 @@
         : step.sheets_update_row ? 'sheets_update_row'
         : step.sheets_find_row ? 'sheets_find_row'
         : step.sheets_get_row ? 'sheets_get_row'
+        : step.schedule ? 'schedule'
         : step.script ? 'script' : 'step';
       const badge = document.createElement('span');
       badge.className = 'badge';
@@ -1027,6 +1028,23 @@
         const n = Number(input.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0;
       });
       wrap.appendChild(label); wrap.appendChild(input); container.appendChild(wrap);
+      return;
+    }
+
+    // SCHEDULE
+    if (step.schedule != null) {
+      const cfg = (typeof step.schedule === 'object' && step.schedule) ? step.schedule : { time: step.schedule };
+      const timeInit = cfg.time != null ? String(cfg.time) : '';
+      container.appendChild(fieldText('time (HH:MM)', timeInit, (v) => { if (!step.schedule || typeof step.schedule !== 'object') step.schedule = {}; step.schedule.time = v; }, true));
+      const tzInit = cfg.timezone != null ? String(cfg.timezone) : '';
+      container.appendChild(fieldText('timezone (IANA)', tzInit, (v) => { if (!step.schedule || typeof step.schedule !== 'object') step.schedule = {}; step.schedule.timezone = v; }, true));
+      const dateInit = cfg.date != null ? String(cfg.date) : '';
+      container.appendChild(fieldText('date (dd.mm.yyyy, optional)', dateInit, (v) => { if (!step.schedule || typeof step.schedule !== 'object') step.schedule = {}; if (v) step.schedule.date = v; else delete step.schedule.date; }, true));
+      const recurWrap = document.createElement('div'); recurWrap.className = 'field';
+      const recurLabel = document.createElement('div'); recurLabel.className = 'label'; recurLabel.textContent = 'recurring (daily)';
+      const recurInput = document.createElement('input'); recurInput.type = 'checkbox'; recurInput.checked = !!cfg.recurring;
+      recurInput.addEventListener('change', () => { if (!step.schedule || typeof step.schedule !== 'object') step.schedule = {}; if (recurInput.checked) step.schedule.recurring = true; else delete step.schedule.recurring; });
+      recurWrap.appendChild(recurLabel); recurWrap.appendChild(recurInput); container.appendChild(recurWrap);
       return;
     }
 
