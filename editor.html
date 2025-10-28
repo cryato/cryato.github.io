@@ -1021,13 +1021,30 @@
 
     // WAIT
     if (step.wait != null) {
-      const wrap = document.createElement('div'); wrap.className = 'field';
-      const label = document.createElement('div'); label.className = 'label'; label.textContent = 'seconds';
-      const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.value = String((step.wait && step.wait.seconds) || 0);
-      input.addEventListener('input', () => {
-        const n = Number(input.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0;
+      // seconds
+      const wrapS = document.createElement('div'); wrapS.className = 'field';
+      const labelS = document.createElement('div'); labelS.className = 'label'; labelS.textContent = 'seconds';
+      const inputS = document.createElement('input'); inputS.type = 'number'; inputS.min = '0'; inputS.value = String((step.wait && step.wait.seconds) || 0);
+      inputS.addEventListener('input', () => {
+        const n = Number(inputS.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0;
       });
-      wrap.appendChild(label); wrap.appendChild(input); container.appendChild(wrap);
+      wrapS.appendChild(labelS); wrapS.appendChild(inputS); container.appendChild(wrapS);
+      // minutes
+      const wrapM = document.createElement('div'); wrapM.className = 'field';
+      const labelM = document.createElement('div'); labelM.className = 'label'; labelM.textContent = 'minutes';
+      const inputM = document.createElement('input'); inputM.type = 'number'; inputM.min = '0'; inputM.value = String((step.wait && step.wait.minutes) || 0);
+      inputM.addEventListener('input', () => {
+        const n = Number(inputM.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.minutes = Number.isFinite(n) && n >= 0 ? n : 0;
+      });
+      wrapM.appendChild(labelM); wrapM.appendChild(inputM); container.appendChild(wrapM);
+      // days
+      const wrapD = document.createElement('div'); wrapD.className = 'field';
+      const labelD = document.createElement('div'); labelD.className = 'label'; labelD.textContent = 'days';
+      const inputD = document.createElement('input'); inputD.type = 'number'; inputD.min = '0'; inputD.value = String((step.wait && step.wait.days) || 0);
+      inputD.addEventListener('input', () => {
+        const n = Number(inputD.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.days = Number.isFinite(n) && n >= 0 ? n : 0;
+      });
+      wrapD.appendChild(labelD); wrapD.appendChild(inputD); container.appendChild(wrapD);
       return;
     }
 
@@ -1730,7 +1747,11 @@
         formWrap.appendChild(field('keyboard', kb));
         formWrap.appendChild(field('verification', ver));
       } else if (t === 'wait') {
+        const days = document.createElement('input'); days.type = 'number'; days.placeholder = 'Days'; days.min = '0';
+        const minutes = document.createElement('input'); minutes.type = 'number'; minutes.placeholder = 'Minutes'; minutes.min = '0';
         const secs = document.createElement('input'); secs.type = 'number'; secs.placeholder = 'Seconds'; secs.min = '0';
+        formWrap.appendChild(field('days', days));
+        formWrap.appendChild(field('minutes', minutes));
         formWrap.appendChild(field('seconds', secs));
       } else if (t === 'schedule') {
         const time = document.createElement('input'); time.type = 'text'; time.placeholder = 'HH:MM (supports {{variables}})';
@@ -1851,9 +1872,14 @@
         if (kb && kb.value) step.keyboard = kb.value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
         if (ver && ver.value) step.verification = ver.value;
       } else if (t === 'wait') {
-        const secs = formWrap.querySelector('input[type="number"]');
-        const n = Number(secs && secs.value);
-        step.wait = Number.isFinite(n) ? { seconds: n } : { seconds: 1 };
+        const nums = formWrap.querySelectorAll('input[type="number"]');
+        const d = Number(nums && nums[0] && nums[0].value);
+        const m = Number(nums && nums[1] && nums[1].value);
+        const s = Number(nums && nums[2] && nums[2].value);
+        step.wait = { };
+        if (Number.isFinite(d) && d > 0) step.wait.days = d; else step.wait.days = 0;
+        if (Number.isFinite(m) && m > 0) step.wait.minutes = m; else step.wait.minutes = 0;
+        if (Number.isFinite(s) && s >= 0) step.wait.seconds = s; else step.wait.seconds = 0;
       } else if (t === 'schedule') {
         const inputs = formWrap.querySelectorAll('input[type="text"]');
         const time = inputs && inputs[0];
