@@ -1222,21 +1222,10 @@
       const vta = document.createElement('textarea'); vta.placeholder = 'One value per line'; vta.value = Array.isArray(cfg.values) ? cfg.values.map((x) => String(x || '')).join('\n') : '';
       vta.addEventListener('input', () => { const lines = String(vta.value || '').split(/\r?\n/).filter((s) => s.length > 0); cfg.values = lines; sync(false); });
       valuesWrap.appendChild(vl); valuesWrap.appendChild(vta);
-      const viWrap = document.createElement('div'); viWrap.className = 'field';
-      const vil = document.createElement('div'); vil.className = 'label'; vil.textContent = 'valueInputOption';
-      const vis = document.createElement('select'); ['USER_ENTERED','RAW'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; vis.appendChild(o); }); vis.value = cfg.valueInputOption || 'USER_ENTERED'; vis.style.background = 'rgba(17,24,39,0.6)'; vis.style.border = '1px solid #1f2937'; vis.style.color = '#e5e7eb'; vis.style.borderRadius = '8px'; vis.style.padding = '4px 6px';
-      vis.addEventListener('change', () => { cfg.valueInputOption = vis.value; sync(); });
-      viWrap.appendChild(vil); viWrap.appendChild(vis);
       const save = String((cfg && cfg.saveAs) || '');
       const saveField = fieldText('saveAs', save, (v) => { if (v) cfg.saveAs = v; else delete cfg.saveAs; sync(); }, true);
-      // Advanced JSON
-      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
-      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'advanced (JSON)';
-      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
-      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') { step.sheets_add_row = obj; Object.assign(cfg, obj); sync(false); } });
-      cfgWrap.appendChild(l); cfgWrap.appendChild(ta);
-      function sync(updateJson = true) { step.sheets_add_row = cfg; if (updateJson) { try { ta.value = JSON.stringify(cfg, null, 2); } catch (_) {} } }
-      container.appendChild(f1); container.appendChild(f2); container.appendChild(valuesWrap); container.appendChild(viWrap); container.appendChild(saveField); container.appendChild(cfgWrap);
+      function sync() { step.sheets_add_row = cfg; }
+      container.appendChild(f1); container.appendChild(f2); container.appendChild(valuesWrap); container.appendChild(saveField);
       return;
     }
 
@@ -1246,15 +1235,6 @@
       const f1 = fieldText('spreadsheetId', cfg.spreadsheetId || '', (v) => { cfg.spreadsheetId = v; sync(); }, true);
       const f2 = fieldText('range', cfg.range || '', (v) => { cfg.range = v; sync(); }, true);
       const f3 = fieldText('rowIndex', (cfg.rowIndex != null ? String(cfg.rowIndex) : ''), (v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) cfg.rowIndex = n; else delete cfg.rowIndex; sync(); }, true);
-      const hhWrap = document.createElement('div'); hhWrap.className = 'field';
-      const hhl = document.createElement('div'); hhl.className = 'label'; hhl.textContent = 'hasHeader';
-      const hh = document.createElement('input'); hh.type = 'checkbox'; hh.checked = cfg.hasHeader !== false; hh.addEventListener('change', () => { if (hh.checked) delete cfg.hasHeader; else cfg.hasHeader = false; sync(); });
-      hhWrap.appendChild(hhl); hhWrap.appendChild(hh);
-      const viWrap = document.createElement('div'); viWrap.className = 'field';
-      const vil = document.createElement('div'); vil.className = 'label'; vil.textContent = 'valueInputOption';
-      const vis = document.createElement('select'); ['USER_ENTERED','RAW'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; vis.appendChild(o); }); vis.value = cfg.valueInputOption || 'USER_ENTERED'; vis.style.background = 'rgba(17,24,39,0.6)'; vis.style.border = '1px solid #1f2937'; vis.style.color = '#e5e7eb'; vis.style.borderRadius = '8px'; vis.style.padding = '4px 6px';
-      vis.addEventListener('change', () => { cfg.valueInputOption = vis.value; sync(); });
-      viWrap.appendChild(vil); viWrap.appendChild(vis);
       // cells
       const cellsWrap = document.createElement('div'); cellsWrap.className = 'field';
       const cl = document.createElement('div'); cl.className = 'label'; cl.textContent = 'cells';
@@ -1275,14 +1255,8 @@
       cellsWrap.appendChild(cl); cellsWrap.appendChild(cta);
       const save = String((cfg && cfg.saveAs) || '');
       const saveField = fieldText('saveAs', save, (v) => { if (v) cfg.saveAs = v; else delete cfg.saveAs; sync(); }, true);
-      // Advanced JSON
-      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
-      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'advanced (JSON)';
-      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
-      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') { step.sheets_update_row = obj; Object.assign(cfg, obj); sync(false); } });
-      cfgWrap.appendChild(l); cfgWrap.appendChild(ta);
-      function sync(updateJson = true) { step.sheets_update_row = cfg; if (updateJson) { try { ta.value = JSON.stringify(cfg, null, 2); } catch (_) {} } }
-      container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(hhWrap); container.appendChild(viWrap); container.appendChild(cellsWrap); container.appendChild(saveField); container.appendChild(cfgWrap);
+      function sync() { step.sheets_update_row = cfg; }
+      container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(cellsWrap); container.appendChild(saveField);
       return;
     }
 
@@ -1297,33 +1271,11 @@
         sync();
       }, true);
       const f4 = fieldText('search', (cfg.search != null ? String(cfg.search) : ''), (v) => { cfg.search = v; sync(); }, true);
-      const hhWrap = document.createElement('div'); hhWrap.className = 'field';
-      const hhl = document.createElement('div'); hhl.className = 'label'; hhl.textContent = 'hasHeader';
-      const hh = document.createElement('input'); hh.type = 'checkbox'; hh.checked = cfg.hasHeader !== false; hh.addEventListener('change', () => { if (hh.checked) delete cfg.hasHeader; else cfg.hasHeader = false; sync(); });
-      hhWrap.appendChild(hhl); hhWrap.appendChild(hh);
-      const matchWrap = document.createElement('div'); matchWrap.className = 'field';
-      const ml = document.createElement('div'); ml.className = 'label'; ml.textContent = 'match';
-      const ms = document.createElement('select'); ['exact','includes'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; ms.appendChild(o); }); ms.value = (cfg.match || 'exact').toLowerCase(); ms.style.background = 'rgba(17,24,39,0.6)'; ms.style.border = '1px solid #1f2937'; ms.style.color = '#e5e7eb'; ms.style.borderRadius = '8px'; ms.style.padding = '4px 6px';
-      ms.addEventListener('change', () => { cfg.match = ms.value; sync(); });
-      matchWrap.appendChild(ml); matchWrap.appendChild(ms);
-      const csWrap = document.createElement('div'); csWrap.className = 'field';
-      const csl = document.createElement('div'); csl.className = 'label'; csl.textContent = 'caseSensitive';
-      const cs = document.createElement('input'); cs.type = 'checkbox'; cs.checked = cfg.caseSensitive === true; cs.addEventListener('change', () => { if (cs.checked) cfg.caseSensitive = true; else delete cfg.caseSensitive; sync(); });
-      csWrap.appendChild(csl); csWrap.appendChild(cs);
-      const ucWrap = document.createElement('div'); ucWrap.className = 'field';
-      const ucl = document.createElement('div'); ucl.className = 'label'; ucl.textContent = 'update_cache';
-      const uc = document.createElement('input'); uc.type = 'checkbox'; uc.checked = cfg.update_cache != null && String(cfg.update_cache).trim() !== ''; uc.addEventListener('change', () => { if (uc.checked) cfg.update_cache = '1'; else delete cfg.update_cache; sync(); });
-      ucWrap.appendChild(ucl); ucWrap.appendChild(uc);
+      const ucField = fieldText('update_cache', (cfg.update_cache != null ? String(cfg.update_cache) : ''), (v) => { if (String(v || '').trim()) cfg.update_cache = v; else delete cfg.update_cache; sync(); }, true);
       const save = String((cfg && cfg.saveAs) || '');
       const saveField = fieldText('saveAs', save, (v) => { if (v) cfg.saveAs = v; else delete cfg.saveAs; sync(); }, true);
-      // Advanced JSON
-      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
-      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'advanced (JSON)';
-      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
-      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') { step.sheets_find_row = obj; Object.assign(cfg, obj); sync(false); } });
-      cfgWrap.appendChild(l); cfgWrap.appendChild(ta);
-      function sync(updateJson = true) { step.sheets_find_row = cfg; if (updateJson) { try { ta.value = JSON.stringify(cfg, null, 2); } catch (_) {} } }
-      container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(f4); container.appendChild(hhWrap); container.appendChild(matchWrap); container.appendChild(csWrap); container.appendChild(ucWrap); container.appendChild(saveField); container.appendChild(cfgWrap);
+      function sync() { step.sheets_find_row = cfg; }
+      container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(f4); container.appendChild(ucField); container.appendChild(saveField);
       return;
     }
 
@@ -1333,20 +1285,10 @@
       const f1 = fieldText('spreadsheetId', cfg.spreadsheetId || '', (v) => { cfg.spreadsheetId = v; sync(); }, true);
       const f2 = fieldText('range', cfg.range || '', (v) => { cfg.range = v; sync(); }, true);
       const f3 = fieldText('rowNumber', (cfg.rowNumber != null ? String(cfg.rowNumber) : ''), (v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) cfg.rowNumber = n; else delete cfg.rowNumber; sync(); }, true);
-      const hhWrap = document.createElement('div'); hhWrap.className = 'field';
-      const hhl = document.createElement('div'); hhl.className = 'label'; hhl.textContent = 'hasHeader';
-      const hh = document.createElement('input'); hh.type = 'checkbox'; hh.checked = cfg.hasHeader !== false; hh.addEventListener('change', () => { if (hh.checked) delete cfg.hasHeader; else cfg.hasHeader = false; sync(); });
-      hhWrap.appendChild(hhl); hhWrap.appendChild(hh);
       const save = String((cfg && cfg.saveAs) || '');
       const saveField = fieldText('saveAs', save, (v) => { if (v) cfg.saveAs = v; else delete cfg.saveAs; sync(); }, true);
-      // Advanced JSON
-      const cfgWrap = document.createElement('div'); cfgWrap.className = 'field';
-      const l = document.createElement('div'); l.className = 'label'; l.textContent = 'advanced (JSON)';
-      const ta = document.createElement('textarea'); ta.value = JSON.stringify(cfg, null, 2);
-      ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') { step.sheets_get_row = obj; Object.assign(cfg, obj); sync(false); } });
-      cfgWrap.appendChild(l); cfgWrap.appendChild(ta);
-      function sync(updateJson = true) { step.sheets_get_row = cfg; if (updateJson) { try { ta.value = JSON.stringify(cfg, null, 2); } catch (_) {} } }
-      container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(hhWrap); container.appendChild(saveField); container.appendChild(cfgWrap);
+      function sync() { step.sheets_get_row = cfg; }
+      container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(saveField);
       return;
     }
 
@@ -1382,23 +1324,12 @@
     wrap.appendChild(label);
 
     if (String(labelText) === 'saveAs' && singleLine) {
-      const row = document.createElement('div');
-      row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '8px';
-      const chip = document.createElement('span'); chip.className = 'code';
       const getBraced = () => `{{${String(input.value || '').trim()}}}`;
-      const updateChip = () => { chip.textContent = getBraced(); chip.title = 'Click to copy ' + getBraced(); input.title = chip.title; };
-      updateChip();
-      input.addEventListener('input', updateChip);
-      const handleCopy = async () => { const ok = await copyTextToClipboard(getBraced()); showToast('Copied'); return ok; };
-      chip.style.cursor = 'pointer';
-      chip.addEventListener('click', handleCopy);
-      input.addEventListener('click', handleCopy);
-      row.appendChild(input);
-      row.appendChild(chip);
-      wrap.appendChild(row);
-    } else {
-      wrap.appendChild(input);
+      input.title = 'Click to copy ' + getBraced();
+      input.addEventListener('input', () => { input.title = 'Click to copy ' + getBraced(); });
+      input.addEventListener('click', async () => { await copyTextToClipboard(getBraced()); showToast('Copied'); });
     }
+    wrap.appendChild(input);
     return wrap;
   }
 
@@ -1872,17 +1803,10 @@
       const l = document.createElement('div'); l.className = 'label'; l.textContent = label;
     f.appendChild(l);
     if (String(label) === 'saveAs' && inputEl && inputEl.tagName === 'INPUT') {
-      const row = document.createElement('div'); row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '8px';
-      const chip = document.createElement('span'); chip.className = 'code';
       const getBraced = () => `{{${String(inputEl.value || '').trim()}}}`;
-      const updateChip = () => { chip.textContent = getBraced(); chip.title = 'Click to copy ' + getBraced(); inputEl.title = chip.title; };
-      updateChip();
-      inputEl.addEventListener('input', updateChip);
-      const handleCopy = async () => { await copyTextToClipboard(getBraced()); showToast('Copied'); };
-      chip.style.cursor = 'pointer';
-      chip.addEventListener('click', handleCopy);
-      inputEl.addEventListener('click', handleCopy);
-      row.appendChild(inputEl); row.appendChild(chip); f.appendChild(row); return f;
+      inputEl.title = 'Click to copy ' + getBraced();
+      inputEl.addEventListener('input', () => { inputEl.title = 'Click to copy ' + getBraced(); });
+      inputEl.addEventListener('click', async () => { await copyTextToClipboard(getBraced()); showToast('Copied'); });
     }
     f.appendChild(inputEl); return f;
     }
