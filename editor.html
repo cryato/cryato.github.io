@@ -1029,6 +1029,14 @@
         const n = Number(inputS.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0;
       });
       wrapS.appendChild(labelS); wrapS.appendChild(inputS); container.appendChild(wrapS);
+      // hours
+      const wrapH = document.createElement('div'); wrapH.className = 'field';
+      const labelH = document.createElement('div'); labelH.className = 'label'; labelH.textContent = 'hours';
+      const inputH = document.createElement('input'); inputH.type = 'number'; inputH.min = '0'; inputH.value = String((step.wait && step.wait.hours) || 0);
+      inputH.addEventListener('input', () => {
+        const n = Number(inputH.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.hours = Number.isFinite(n) && n >= 0 ? n : 0;
+      });
+      wrapH.appendChild(labelH); wrapH.appendChild(inputH); container.appendChild(wrapH);
       // minutes
       const wrapM = document.createElement('div'); wrapM.className = 'field';
       const labelM = document.createElement('div'); labelM.className = 'label'; labelM.textContent = 'minutes';
@@ -1757,9 +1765,11 @@
         formWrap.appendChild(field('verification', ver));
       } else if (t === 'wait') {
         const days = document.createElement('input'); days.type = 'number'; days.placeholder = 'Days'; days.min = '0';
+        const hours = document.createElement('input'); hours.type = 'number'; hours.placeholder = 'Hours'; hours.min = '0';
         const minutes = document.createElement('input'); minutes.type = 'number'; minutes.placeholder = 'Minutes'; minutes.min = '0';
         const secs = document.createElement('input'); secs.type = 'number'; secs.placeholder = 'Seconds'; secs.min = '0';
         formWrap.appendChild(field('days', days));
+        formWrap.appendChild(field('hours', hours));
         formWrap.appendChild(field('minutes', minutes));
         formWrap.appendChild(field('seconds', secs));
       } else if (t === 'schedule') {
@@ -1885,10 +1895,12 @@
       } else if (t === 'wait') {
         const nums = formWrap.querySelectorAll('input[type="number"]');
         const d = Number(nums && nums[0] && nums[0].value);
-        const m = Number(nums && nums[1] && nums[1].value);
-        const s = Number(nums && nums[2] && nums[2].value);
+        const h = Number(nums && nums[1] && nums[1].value);
+        const m = Number(nums && nums[2] && nums[2].value);
+        const s = Number(nums && nums[3] && nums[3].value);
         step.wait = { };
         if (Number.isFinite(d) && d > 0) step.wait.days = d; else step.wait.days = 0;
+        if (Number.isFinite(h) && h > 0) step.wait.hours = h; else step.wait.hours = 0;
         if (Number.isFinite(m) && m > 0) step.wait.minutes = m; else step.wait.minutes = 0;
         if (Number.isFinite(s) && s >= 0) step.wait.seconds = s; else step.wait.seconds = 0;
       } else if (t === 'schedule') {

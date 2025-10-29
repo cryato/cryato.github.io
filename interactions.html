@@ -552,6 +552,11 @@
         const labelS = document.createElement('div'); labelS.className = 'label'; labelS.textContent = 'seconds';
         const inputS = document.createElement('input'); inputS.type = 'number'; inputS.min = '0'; inputS.value = String((step.wait && step.wait.seconds) || 0); inputS.disabled = !editable; if (editable) inputS.addEventListener('input', () => { const n = Number(inputS.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.seconds = Number.isFinite(n) && n >= 0 ? n : 0; });
         fieldS.appendChild(labelS); fieldS.appendChild(inputS); container.appendChild(fieldS);
+        // hours
+        const fieldH = document.createElement('div'); fieldH.className = 'field';
+        const labelH = document.createElement('div'); labelH.className = 'label'; labelH.textContent = 'hours';
+        const inputH = document.createElement('input'); inputH.type = 'number'; inputH.min = '0'; inputH.value = String((step.wait && step.wait.hours) || 0); inputH.disabled = !editable; if (editable) inputH.addEventListener('input', () => { const n = Number(inputH.value); if (!step.wait || typeof step.wait !== 'object') step.wait = {}; step.wait.hours = Number.isFinite(n) && n >= 0 ? n : 0; });
+        fieldH.appendChild(labelH); fieldH.appendChild(inputH); container.appendChild(fieldH);
         // minutes
         const fieldM = document.createElement('div'); fieldM.className = 'field';
         const labelM = document.createElement('div'); labelM.className = 'label'; labelM.textContent = 'minutes';
