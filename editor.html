@@ -992,7 +992,7 @@
       const verWrap = document.createElement('div'); verWrap.className = 'field';
       const verLabel = document.createElement('div'); verLabel.className = 'label'; verLabel.textContent = 'verification';
       const verSel = document.createElement('select');
-      ['', 'strict', 'email'].forEach((opt) => { const o = document.createElement('option'); o.value = opt; o.textContent = opt || '(none)'; verSel.appendChild(o); });
+      ['', 'strict', 'email', 'time'].forEach((opt) => { const o = document.createElement('option'); o.value = opt; o.textContent = opt || '(none)'; verSel.appendChild(o); });
       verSel.value = typeof step.verification === 'string' ? step.verification : '';
       verSel.style.background = 'rgba(17,24,39,0.6)'; verSel.style.border = '1px solid #1f2937'; verSel.style.color = '#e5e7eb'; verSel.style.borderRadius = '8px'; verSel.style.padding = '4px 6px';
       verSel.addEventListener('change', () => { const v = verSel.value; if (v) step.verification = v; else delete step.verification; });
