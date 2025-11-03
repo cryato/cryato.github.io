@@ -959,7 +959,8 @@
         : step.sheets_find_row ? 'sheets_find_row'
         : step.sheets_get_row ? 'sheets_get_row'
         : step.schedule ? 'schedule'
-        : step.script ? 'script' : 'step';
+        : step.script ? 'script'
+        : step.send_invoice ? 'send_invoice' : 'step';
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = type.toUpperCase();
@@ -1289,6 +1290,29 @@
       const saveField = fieldText('saveAs', save, (v) => { if (v) cfg.saveAs = v; else delete cfg.saveAs; sync(); }, true);
       function sync() { step.sheets_get_row = cfg; }
       container.appendChild(f1); container.appendChild(f2); container.appendChild(f3); container.appendChild(saveField);
+      return;
+    }
+
+    // SEND INVOICE
+    if (step.send_invoice != null) {
+      const invoice = step.send_invoice || {};
+      container.appendChild(fieldText('title', invoice.title || '', (v) => { invoice.title = v; step.send_invoice = invoice; }, true));
+      container.appendChild(fieldText('description', invoice.description || '', (v) => { invoice.description = v; step.send_invoice = invoice; }));
+      container.appendChild(fieldText('payload', invoice.payload || '', (v) => { invoice.payload = v; step.send_invoice = invoice; }, true));
+      container.appendChild(fieldText('currency', invoice.currency || '', (v) => { invoice.currency = v; step.send_invoice = invoice; }, true));
+      const pricesWrap = document.createElement('div'); pricesWrap.className = 'field';
+      const pricesLabel = document.createElement('div'); pricesLabel.className = 'label'; pricesLabel.textContent = 'prices (JSON array)';
+      const pricesTa = document.createElement('textarea'); pricesTa.value = Array.isArray(invoice.prices) ? JSON.stringify(invoice.prices, null, 2) : '';
+      pricesTa.placeholder = '[{"label":"Item","amount":1000}]';
+      pricesTa.addEventListener('input', () => {
+        const obj = safeParseJson(pricesTa.value);
+        if (Array.isArray(obj)) invoice.prices = obj; else if (!pricesTa.value.trim()) delete invoice.prices;
+        step.send_invoice = invoice;
+      });
+      pricesWrap.appendChild(pricesLabel); pricesWrap.appendChild(pricesTa); container.appendChild(pricesWrap);
+      container.appendChild(fieldText('provider_token', invoice.provider_token || '', (v) => { if (v) invoice.provider_token = v; else delete invoice.provider_token; step.send_invoice = invoice; }, true));
+      container.appendChild(fieldText('photo_url', invoice.photo_url || '', (v) => { if (v) invoice.photo_url = v; else delete invoice.photo_url; step.send_invoice = invoice; }, true));
+      container.appendChild(fieldText('user_id', invoice.user_id || '', (v) => { if (v) invoice.user_id = v; else delete invoice.user_id; step.send_invoice = invoice; }, true));
       return;
     }
 
@@ -1790,6 +1814,7 @@
       { v: 'sheets_find_row', n: 'Sheets: find row' },
       { v: 'sheets_get_row', n: 'Sheets: get row' },
       { v: 'script', n: 'Run script' },
+      { v: 'send_invoice', n: 'Send Invoice' },
       { v: 'from_json', n: 'From JSON' }
     ];
     types.forEach((t) => { const o = document.createElement('option'); o.value = t.v; o.textContent = t.n; typeSel.appendChild(o); });
@@ -1919,6 +1944,23 @@
         formWrap.appendChild(field('file', file));
         formWrap.appendChild(field('code', code));
         formWrap.appendChild(field('timeoutMs', timeout));
+      } else if (t === 'send_invoice') {
+        const title = document.createElement('input'); title.type = 'text'; title.placeholder = 'title (supports {{variables}})';
+        const description = document.createElement('textarea'); description.placeholder = 'description (supports {{variables}})';
+        const payload = document.createElement('input'); payload.type = 'text'; payload.placeholder = 'payload (unique identifier, supports {{variables}})';
+        const currency = document.createElement('input'); currency.type = 'text'; currency.placeholder = 'currency (e.g., USD, EUR)';
+        const prices = document.createElement('textarea'); prices.placeholder = 'prices JSON array: [{"label":"Item","amount":1000}] (supports {{variables}})'; prices.style.minHeight = '100px';
+        const providerToken = document.createElement('input'); providerToken.type = 'text'; providerToken.placeholder = 'provider_token (optional, for real payments)';
+        const photoUrl = document.createElement('input'); photoUrl.type = 'text'; photoUrl.placeholder = 'photo_url (optional, supports {{variables}})';
+        const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
+        formWrap.appendChild(field('title', title));
+        formWrap.appendChild(field('description', description));
+        formWrap.appendChild(field('payload', payload));
+        formWrap.appendChild(field('currency', currency));
+        formWrap.appendChild(field('prices (JSON array)', prices));
+        formWrap.appendChild(field('provider_token', providerToken));
+        formWrap.appendChild(field('photo_url', photoUrl));
+        formWrap.appendChild(field('user_id', uid));
       } else if (t === 'from_json') {
         const ta = document.createElement('textarea');
         ta.placeholder = 'Paste a step object or an array of steps JSON';
@@ -2059,6 +2101,30 @@
         const codeVal = String((ta && ta.value) || '');
         if (codeVal) spec.code = codeVal;
         step.script = spec;
+      } else if (t === 'send_invoice') {
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const textareas = formWrap.querySelectorAll('textarea');
+        const title = inputs && inputs[0];
+        const payload = inputs && inputs[1];
+        const currency = inputs && inputs[2];
+        const providerToken = inputs && inputs[3];
+        const photoUrl = inputs && inputs[4];
+        const uid = inputs && inputs[5];
+        const description = textareas && textareas[0];
+        const prices = textareas && textareas[1];
+        const invoice = {};
+        if (title && title.value) invoice.title = String(title.value);
+        if (description && description.value) invoice.description = String(description.value);
+        if (payload && payload.value) invoice.payload = String(payload.value);
+        if (currency && currency.value) invoice.currency = String(currency.value);
+        if (providerToken && providerToken.value) invoice.provider_token = String(providerToken.value);
+        if (photoUrl && photoUrl.value) invoice.photo_url = String(photoUrl.value);
+        if (uid && uid.value) invoice.user_id = String(uid.value);
+        if (prices && prices.value && prices.value.trim()) {
+          const pricesObj = parseJsonSafe(prices.value);
+          if (Array.isArray(pricesObj)) invoice.prices = pricesObj;
+        }
+        step.send_invoice = invoice;
       } else if (t === 'from_json') {
         const ta = formWrap.querySelector('textarea');
         const txt = String((ta && ta.value) || '').trim();
