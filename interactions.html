@@ -500,6 +500,11 @@
         const lPhoto = document.createElement('div'); lPhoto.className = 'label'; lPhoto.textContent = 'photo_url';
         const iPhoto = document.createElement('input'); iPhoto.type = 'text'; iPhoto.value = String(step.photo_url || ''); iPhoto.disabled = !editable; if (editable) iPhoto.addEventListener('input', (e) => { const v = e.target.value; if (v) step.photo_url = v; else delete step.photo_url; });
         fPhoto.appendChild(lPhoto); fPhoto.appendChild(iPhoto); container.appendChild(fPhoto);
+        // video_url
+        const fVideo = document.createElement('div'); fVideo.className = 'field';
+        const lVideo = document.createElement('div'); lVideo.className = 'label'; lVideo.textContent = 'video_url';
+        const iVideo = document.createElement('input'); iVideo.type = 'text'; iVideo.value = String(step.video_url || ''); iVideo.disabled = !editable; if (editable) iVideo.addEventListener('input', (e) => { const v = e.target.value; if (v) step.video_url = v; else delete step.video_url; });
+        fVideo.appendChild(lVideo); fVideo.appendChild(iVideo); container.appendChild(fVideo);
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
         const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.saveAs = v; else delete step.saveAs; });
