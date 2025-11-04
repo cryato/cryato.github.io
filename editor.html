@@ -1041,14 +1041,10 @@
     
     function saveTriggers() {
       // Only save triggers array, remove legacy trigger field
+      // Note: Don't filter empty triggers here - allow them during editing
       if (Array.isArray(def.triggers) && def.triggers.length > 0) {
         // Remove legacy trigger field - we only use triggers array now
         delete def.trigger;
-        // Clean up any empty triggers
-        def.triggers = def.triggers.filter(t => t && t.value && String(t.value).trim().length > 0);
-        if (def.triggers.length === 0) {
-          delete def.triggers;
-        }
       } else {
         delete def.triggers;
         delete def.trigger;
@@ -2621,8 +2617,16 @@
         scriptCodesByIdForRestore = scriptCodesById;
       } catch (_) {}
 
-      // 3) Clean up triggers: remove legacy trigger field if triggers array exists
+      // 3) Clean up triggers: remove legacy trigger field and filter out empty triggers before saving
       if (Array.isArray(def.triggers) && def.triggers.length > 0) {
+        // Remove legacy trigger field
+        delete def.trigger;
+        // Filter out empty triggers only when actually saving to server
+        def.triggers = def.triggers.filter(t => t && t.value && String(t.value).trim().length > 0);
+        if (def.triggers.length === 0) {
+          delete def.triggers;
+        }
+      } else {
         delete def.trigger;
       }
       
