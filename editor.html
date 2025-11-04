@@ -841,12 +841,16 @@
           if (t.type === 'command') {
             const val = t.value.startsWith('/') ? t.value : `/${t.value}`;
             return val;
+          } else if (t.type === 'catch_all') {
+            return '(catch-all)';
           } else {
             return `"${t.value}"`;
           }
         }).join(', ');
       } else if (def && def.trigger) {
         trig = def.trigger;
+      } else if (def && def.type === 'catch_all') {
+        trig = '(catch-all)';
       } else {
         trig = triggersMap.get(key) || '';
       }
@@ -888,12 +892,16 @@
         if (t.type === 'command') {
           const val = t.value.startsWith('/') ? t.value : `/${t.value}`;
           return val;
+        } else if (t.type === 'catch_all') {
+          return '(catch-all)';
         } else {
           return `"${t.value}"`;
         }
       }).join(', ');
     } else if (def.trigger) {
       triggerDisplay = def.trigger;
+    } else if (def.type === 'catch_all') {
+      triggerDisplay = '(catch-all)';
     }
     title.textContent = currentFlowKey + (triggerDisplay ? '  ·  ' + triggerDisplay : '');
     try { if (currentFlowKey) document.title = currentFlowKey; } catch (_) {}
@@ -946,10 +954,10 @@
         
         const typeSel = document.createElement('select');
         typeSel.style.flex = '0 0 120px';
-        ['command', 'keyword'].forEach(t => {
+        ['command', 'keyword', 'catch_all'].forEach(t => {
           const opt = document.createElement('option');
           opt.value = t;
-          opt.textContent = t === 'command' ? 'Command (/...)' : 'Keyword/Phrase';
+          opt.textContent = t === 'command' ? 'Command (/...)' : (t === 'keyword' ? 'Keyword/Phrase' : 'Catch-all');
           if (trigger.type === t) opt.selected = true;
           typeSel.appendChild(opt);
         });
@@ -958,7 +966,13 @@
         valueInput.type = 'text';
         valueInput.style.flex = '1';
         valueInput.value = trigger.value || '';
-        valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+        if (trigger.type === 'catch_all') {
+          valueInput.style.display = 'none';
+          valueInput.value = 'catch-all';
+        } else {
+          valueInput.style.display = '';
+          valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+        }
         
         const globalCheckbox = document.createElement('input');
         globalCheckbox.type = 'checkbox';
@@ -989,13 +1003,21 @@
         
         typeSel.addEventListener('change', () => {
           trigger.type = typeSel.value;
-          valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+          if (trigger.type === 'catch_all') {
+            valueInput.style.display = 'none';
+            valueInput.value = 'catch-all';
+          } else {
+            valueInput.style.display = '';
+            valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+          }
           saveTriggers();
         });
         
         valueInput.addEventListener('input', () => {
-          trigger.value = valueInput.value.trim();
-          saveTriggers();
+          if (trigger.type !== 'catch_all') {
+            trigger.value = valueInput.value.trim();
+            saveTriggers();
+          }
         });
         
         globalCheckbox.addEventListener('change', () => {
@@ -2423,14 +2445,25 @@
 
     const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'flow key (e.g., orders)';
     const typeSel = document.createElement('select');
-    ;[['chat','Chat (triggered by command)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
+    ;[['chat','Chat (triggered by command)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)'], ['catch_all','Catch-all (triggered when no other flow matches)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
     const triggerInput = document.createElement('input'); triggerInput.type = 'text'; triggerInput.placeholder = '/orders (for chat) or orders (for webhook)';
     const descInput = document.createElement('input'); descInput.type = 'text'; descInput.placeholder = 'optional description';
 
     function updateTriggerPlaceholder() {
-      if (typeSel.value === 'webhook') triggerInput.placeholder = 'orders (webhook name)';
-      else if (typeSel.value === 'error_handler') triggerInput.placeholder = '(not used)';
-      else triggerInput.placeholder = '/orders (Telegram command)';
+      if (typeSel.value === 'webhook') {
+        triggerInput.placeholder = 'orders (webhook name)';
+        triggerInput.style.display = '';
+      } else if (typeSel.value === 'error_handler') {
+        triggerInput.placeholder = '(not used)';
+        triggerInput.style.display = '';
+      } else if (typeSel.value === 'catch_all') {
+        triggerInput.placeholder = '(not used)';
+        triggerInput.style.display = 'none';
+        triggerInput.value = '';
+      } else {
+        triggerInput.placeholder = '/orders (Telegram command)';
+        triggerInput.style.display = '';
+      }
     }
     typeSel.addEventListener('change', updateTriggerPlaceholder);
     updateTriggerPlaceholder();
@@ -2451,7 +2484,7 @@
     btnCreate.addEventListener('click', async () => {
       try {
         const key = String(keyInput.value || '').trim();
-        const type = typeSel.value === 'webhook' ? 'webhook' : (typeSel.value === 'error_handler' ? 'error_handler' : 'chat');
+        const type = typeSel.value === 'webhook' ? 'webhook' : (typeSel.value === 'error_handler' ? 'error_handler' : (typeSel.value === 'catch_all' ? 'catch_all' : 'chat'));
         const trigger = String(triggerInput.value || '').trim();
         const description = String(descInput.value || '').trim();
         if (!key) { alert('Enter a flow key'); return; }
@@ -2467,6 +2500,10 @@
           def.type = 'error_handler';
           // No trigger; this flow is invoked programmatically with variables
           def.description = def.description || 'Handles errors from other flows';
+        } else if (type === 'catch_all') {
+          def.type = 'catch_all';
+          def.triggers = [{ type: 'catch_all', value: 'catch-all' }];
+          def.description = def.description || 'Triggers when no other flow matches';
         } else {
           def.trigger = trigger || ('/' + key);
           def.steps = [{ say: 'Hello! This is a new flow.' }];
