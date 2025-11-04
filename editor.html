@@ -104,6 +104,20 @@
     </div>
   </div>
 
+  <!-- Bot management panel -->
+  <div id="botsPanel" class="panel" style="display:none; margin: 16px; padding: 12px;">
+    <div class="steps">
+      <div class="flow-header">
+        <div class="flow-title">Bot Management</div>
+        <div class="toolbar">
+          <button id="btnNewBot" class="btn primary">New Bot</button>
+          <button id="btnCloseBots" class="btn">Close</button>
+        </div>
+      </div>
+      <div id="botsList" class="steps"></div>
+    </div>
+  </div>
+
   <input type="file" id="fileInput" accept="application/json" style="display:none" />
 
   <!-- Cloud Storage config panel (client-only; no secrets stored besides OAuth client ID) -->
@@ -142,6 +156,10 @@
     btnLoadMoreVersions: document.getElementById('btnLoadMoreVersions'),
     btnCloseVersions: document.getElementById('btnCloseVersions'),
     versionsHint: document.getElementById('versionsHint'),
+    botsPanel: document.getElementById('botsPanel'),
+    botsList: document.getElementById('botsList'),
+    btnNewBot: document.getElementById('btnNewBot'),
+    btnCloseBots: document.getElementById('btnCloseBots'),
   };
 
   let flowDoc = null; // { flows: { key: def } }
@@ -796,31 +814,109 @@
         flowDoc = { flows: {} };
       currentFlowKey = null;
       }
-      renderFlows();
-      renderSteps();
+      await renderFlows();
+      await renderSteps();
     } catch (err) {
       console.error(err);
       flowDoc = { flows: {} };
-      renderFlows();
-      renderSteps();
+      await renderFlows();
+      await renderSteps();
     }
   }
 
-  function renderFlows() {
+  async function renderFlows() {
+    await loadFoldersMap();
     const flows = (flowDoc && flowDoc.flows) || {};
     const selected = currentFlowKey;
     els.flows.innerHTML = '';
+    
+    // Breadcrumbs
+    const breadcrumbs = document.createElement('div');
+    breadcrumbs.style.display = 'flex';
+    breadcrumbs.style.alignItems = 'center';
+    breadcrumbs.style.gap = '8px';
+    breadcrumbs.style.marginBottom = '12px';
+    breadcrumbs.style.padding = '8px';
+    breadcrumbs.style.borderBottom = '1px solid #1f2937';
+    
+    const rootLink = document.createElement('a');
+    rootLink.href = '#';
+    rootLink.textContent = 'Root';
+    rootLink.style.color = currentFolderPath === '' ? 'var(--primary)' : 'var(--text)';
+    rootLink.style.textDecoration = 'none';
+    rootLink.style.cursor = 'pointer';
+    rootLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      currentFolderPath = '';
+      renderFlows();
+    });
+    breadcrumbs.appendChild(rootLink);
+    
+    if (currentFolderPath) {
+      const parts = currentFolderPath.split('/');
+      let currentPath = '';
+      parts.forEach((part, idx) => {
+        breadcrumbs.appendChild(document.createTextNode(' / '));
+        currentPath = idx === 0 ? part : currentPath + '/' + part;
+        const link = document.createElement('a');
+        link.href = '#';
+        link.textContent = part;
+        link.style.color = idx === parts.length - 1 ? 'var(--primary)' : 'var(--text)';
+        link.style.textDecoration = 'none';
+        link.style.cursor = 'pointer';
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          currentFolderPath = currentPath;
+          renderFlows();
+        });
+        breadcrumbs.appendChild(link);
+      });
+    }
+    
+    els.flows.appendChild(breadcrumbs);
+    
+    // Get flows and folders in current folder
+    const flowsInFolder = getFlowsInFolder(currentFolderPath);
+    const subfolders = getSubfoldersInFolder(currentFolderPath);
     const keys = flowKeys && flowKeys.length ? flowKeys : Object.keys(flows);
-
-    if (!keys || keys.length === 0) {
+    const flowsInCurrentFolder = flowsInFolder.filter(k => keys.includes(k));
+    
+    if (subfolders.length === 0 && flowsInCurrentFolder.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.textContent = 'No flows found.';
+      empty.textContent = 'No folders or flows found.';
       els.flows.appendChild(empty);
       return;
     }
-
-    keys.forEach((key) => {
+    
+    // Render folders first
+    subfolders.forEach((folderPath) => {
+      const parts = folderPath.split('/');
+      const folderName = parts[parts.length - 1];
+      const item = document.createElement('div');
+      item.className = 'flow-item';
+      item.style.cursor = 'pointer';
+      
+      const icon = document.createElement('div');
+      icon.innerHTML = '📁';
+      
+      const meta = document.createElement('div');
+      const k = document.createElement('div');
+      k.className = 'flow-key';
+      k.textContent = folderName;
+      meta.appendChild(k);
+      
+      item.appendChild(icon);
+      item.appendChild(meta);
+      item.addEventListener('click', () => {
+        currentFolderPath = folderPath;
+        renderFlows();
+      });
+      els.flows.appendChild(item);
+    });
+    
+    // Render flows
+    flowsInCurrentFolder.forEach((key) => {
       const def = flows[key] || {};
       const item = document.createElement('a');
       item.href = `?flow=${encodeURIComponent(key)}`;
@@ -841,9 +937,7 @@
           if (t.type === 'catch_all') {
             return '(catch-all)';
           } else {
-            // Show trigger value as-is, adding / prefix if it starts with / or is a command-like value
             const val = t.value || '';
-            // If value starts with /, show it; otherwise show as-is (could be keyword/phrase)
             return val.startsWith('/') ? val : `"${val}"`;
           }
         }).join(', ');
@@ -860,11 +954,184 @@
 
       item.appendChild(icon);
       item.appendChild(meta);
+      
+      // Add context menu for moving to folder
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openMoveFlowMenu(e, key);
+      });
+      
       els.flows.appendChild(item);
     });
   }
+  
+  async function openMoveFlowMenu(event, flowKey) {
+    // Close existing context menu if any
+    const existing = document.querySelector('.flow-context-menu');
+    if (existing) existing.remove();
+    
+    const menu = document.createElement('div');
+    menu.className = 'flow-context-menu';
+    menu.style.position = 'fixed';
+    menu.style.background = 'rgba(17,24,39,0.95)';
+    menu.style.border = '1px solid #1f2937';
+    menu.style.borderRadius = '8px';
+    menu.style.padding = '8px';
+    menu.style.zIndex = '2000';
+    menu.style.minWidth = '200px';
+    
+    const btnRoot = document.createElement('button');
+    btnRoot.className = 'btn';
+    btnRoot.textContent = 'Move to Root';
+    btnRoot.style.width = '100%';
+    btnRoot.style.marginBottom = '4px';
+    btnRoot.addEventListener('click', async () => {
+      delete foldersMap[flowKey];
+      await saveFoldersMap();
+      await loadFoldersMap();
+      renderFlows();
+      menu.remove();
+    });
+    
+    menu.appendChild(btnRoot);
+    
+    // Get all folder paths and create options
+    const allFolders = new Set();
+    Object.values(foldersMap).forEach(path => {
+      if (path) {
+        const parts = path.split('/');
+        let current = '';
+        parts.forEach(part => {
+          current = current ? current + '/' + part : part;
+          allFolders.add(current);
+        });
+      }
+    });
+    
+    const sortedFolders = Array.from(allFolders).sort();
+    sortedFolders.forEach(folderPath => {
+      if (foldersMap[flowKey] === folderPath) return; // Skip current folder
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = `Move to ${folderPath}`;
+      btn.style.width = '100%';
+      btn.style.marginBottom = '4px';
+      btn.addEventListener('click', async () => {
+        foldersMap[flowKey] = folderPath;
+        await saveFoldersMap();
+        await loadFoldersMap();
+        renderFlows();
+        menu.remove();
+      });
+      menu.appendChild(btn);
+    });
+    
+    // Option to create new folder
+    const btnNewFolder = document.createElement('button');
+    btnNewFolder.className = 'btn primary';
+    btnNewFolder.textContent = 'Move to New Folder...';
+    btnNewFolder.style.width = '100%';
+    btnNewFolder.addEventListener('click', () => {
+      menu.remove();
+      openNewFolderModal(flowKey);
+    });
+    menu.appendChild(btnNewFolder);
+    
+    const x = event.clientX;
+    const y = event.clientY;
+    menu.style.left = Math.max(0, Math.min(x, window.innerWidth - 220)) + 'px';
+    menu.style.top = Math.max(0, Math.min(y, window.innerHeight - 200)) + 'px';
+    
+    document.body.appendChild(menu);
+    
+    const close = () => menu.remove();
+    setTimeout(() => {
+      document.addEventListener('click', close, { once: true });
+      document.addEventListener('contextmenu', close, { once: true });
+    }, 100);
+  }
+  
+  function openNewFolderModal(flowKey) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '1000';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'panel';
+    dialog.style.position = 'absolute';
+    dialog.style.top = '20%';
+    dialog.style.left = '50%';
+    dialog.style.transform = 'translateX(-50%)';
+    dialog.style.width = 'min(500px, 92vw)';
+    dialog.style.padding = '12px';
+    
+    const header = document.createElement('div');
+    header.className = 'flow-header';
+    const title = document.createElement('div');
+    title.className = 'flow-title';
+    title.textContent = 'Move to New Folder';
+    const actions = document.createElement('div');
+    actions.className = 'toolbar';
+    const btnClose = document.createElement('button');
+    btnClose.className = 'btn';
+    btnClose.textContent = 'Cancel';
+    actions.appendChild(btnClose);
+    header.appendChild(title);
+    header.appendChild(actions);
+    
+    const body = document.createElement('div');
+    body.className = 'steps';
+    
+    const folderField = document.createElement('div');
+    folderField.className = 'field';
+    const folderLabel = document.createElement('div');
+    folderLabel.className = 'label';
+    folderLabel.textContent = 'Folder Path';
+    const folderInput = document.createElement('input');
+    folderInput.type = 'text';
+    folderInput.placeholder = 'folder/subfolder';
+    folderField.appendChild(folderLabel);
+    folderField.appendChild(folderInput);
+    
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn primary';
+    btnSave.textContent = 'Move';
+    btnSave.style.marginTop = '16px';
+    
+    body.appendChild(folderField);
+    body.appendChild(btnSave);
+    
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    const close = () => overlay.remove();
+    btnClose.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    
+    btnSave.addEventListener('click', async () => {
+      const path = folderInput.value.trim();
+      if (!path) {
+        alert('Folder path is required.');
+        return;
+      }
+      foldersMap[flowKey] = path;
+      const saved = await saveFoldersMap();
+      if (saved) {
+        await loadFoldersMap();
+        renderFlows();
+        close();
+        showToast('Flow moved to folder');
+      }
+    });
+  }
 
-  function renderSteps() {
+  async function renderSteps() {
     els.steps.innerHTML = '';
     const flows = (flowDoc && flowDoc.flows) || {};
     const def = flows[currentFlowKey];
@@ -915,6 +1182,88 @@
     // Editable flow description
     const descField = fieldText('description', def.description || '', (v) => { def.description = v; });
     els.steps.appendChild(descField);
+
+    // Bot assignment
+    const botsField = document.createElement('div');
+    botsField.className = 'field';
+    const botsLabel = document.createElement('div');
+    botsLabel.className = 'label';
+    botsLabel.textContent = 'Bots';
+    const botsContainer = document.createElement('div');
+    botsContainer.style.display = 'flex';
+    botsContainer.style.flexDirection = 'column';
+    botsContainer.style.gap = '8px';
+    
+    // Ensure def.bots is an array
+    if (!Array.isArray(def.bots)) {
+      def.bots = mainBotName ? [mainBotName] : [];
+    }
+    
+    async function renderBotCheckboxes() {
+      await loadBotsConfig();
+      botsContainer.innerHTML = '';
+      const botNames = Object.keys(botsConfig).sort();
+      if (botNames.length === 0) {
+        const hint = document.createElement('div');
+        hint.className = 'hint';
+        hint.textContent = 'No bots configured. Use "Manage Bots" to add bots.';
+        botsContainer.appendChild(hint);
+      } else {
+        botNames.forEach((botName) => {
+          const row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.gap = '8px';
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = def.bots.includes(botName);
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+              if (!def.bots.includes(botName)) {
+                def.bots.push(botName);
+              }
+            } else {
+              def.bots = def.bots.filter(b => b !== botName);
+            }
+          });
+          
+          const label = document.createElement('label');
+          label.style.cursor = 'pointer';
+          label.style.display = 'flex';
+          label.style.alignItems = 'center';
+          label.style.gap = '8px';
+          label.textContent = botName;
+          if (botsConfig[botName] && botsConfig[botName].is_main) {
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = 'Main';
+            badge.style.fontSize = '10px';
+            label.appendChild(badge);
+          }
+          label.addEventListener('click', (e) => {
+            e.preventDefault();
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change'));
+          });
+          
+          row.appendChild(checkbox);
+          row.appendChild(label);
+          botsContainer.appendChild(row);
+        });
+      }
+    }
+    
+    renderBotCheckboxes().then(() => {
+      botsField.appendChild(botsLabel);
+      botsField.appendChild(botsContainer);
+      els.steps.appendChild(botsField);
+    }).catch(() => {
+      // If loading fails, still show the field but with empty state
+      botsField.appendChild(botsLabel);
+      botsField.appendChild(botsContainer);
+      els.steps.appendChild(botsField);
+    });
 
     // Editable flow triggers
     const triggersWrap = document.createElement('div');
@@ -2969,6 +3318,394 @@
   if (els.btnDeleteFlow) els.btnDeleteFlow.addEventListener('click', deleteCurrentFlow);
   if (els.btnLoadMoreVersions) els.btnLoadMoreVersions.addEventListener('click', loadMoreVersions);
   if (els.btnCloseVersions) els.btnCloseVersions.addEventListener('click', () => ensureVersionsPanelVisible(false));
+  if (els.btnNewBot) els.btnNewBot.addEventListener('click', openNewBotModal);
+  if (els.btnCloseBots) els.btnCloseBots.addEventListener('click', () => { els.botsPanel.style.display = 'none'; });
+
+  // Bot management functions
+  let botsConfig = {}; // { botName: { token: string, is_main: boolean } }
+  let mainBotName = null;
+
+  async function loadBotsConfig() {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket || !hasValidToken()) {
+        // Fallback: try to load from environment variable via backend API if available
+        // For now, use empty config
+        botsConfig = {};
+        mainBotName = null;
+        return;
+      }
+      const res = await fetch(gcsDownloadUrl(bucket, 'bots_config.json'), {
+        headers: { Authorization: `Bearer ${oauth.accessToken}` },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === 'object') {
+          botsConfig = json;
+          // Find main bot
+          for (const [name, config] of Object.entries(botsConfig)) {
+            if (config && config.is_main) {
+              mainBotName = name;
+              break;
+            }
+          }
+        }
+      } else {
+        botsConfig = {};
+        mainBotName = null;
+      }
+    } catch (_) {
+      botsConfig = {};
+      mainBotName = null;
+    }
+  }
+
+  async function saveBotsConfig() {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket || !hasValidToken()) {
+        alert('Please sign in first.');
+        return false;
+      }
+      const token = oauth.accessToken;
+      const body = JSON.stringify(botsConfig, null, 2);
+      const res = await fetch(gcsUploadUrl(bucket, 'bots_config.json'), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: body
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) throw new Error('401');
+        throw new Error('Failed to save bots config');
+      }
+      return true;
+    } catch (e) {
+      console.error('Save bots config error:', e);
+      if (String(e && e.message || '').includes('401')) {
+        showAuthToast('Authentication failed. Sign in to continue.', async () => { await saveBotsConfig(); });
+        return false;
+      }
+      alert('Failed to save bots config: ' + (e.message || e));
+      return false;
+    }
+  }
+
+  function renderBotsList() {
+    els.botsList.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    const bots = Object.keys(botsConfig).sort();
+    if (bots.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'No bots configured. Click "New Bot" to add one.';
+      frag.appendChild(empty);
+    } else {
+      bots.forEach((botName) => {
+        const config = botsConfig[botName] || {};
+        const line = document.createElement('div');
+        line.className = 'step';
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '12px';
+        row.style.flexWrap = 'wrap';
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.style.fontWeight = '600';
+        nameDiv.textContent = botName;
+        if (config.is_main) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = 'Main';
+          badge.style.marginLeft = '8px';
+          nameDiv.appendChild(badge);
+        }
+        
+        const actions = document.createElement('div');
+        actions.className = 'toolbar';
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'btn';
+        btnEdit.textContent = 'Edit';
+        btnEdit.addEventListener('click', () => openEditBotModal(botName));
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn';
+        btnDelete.textContent = 'Delete';
+        btnDelete.addEventListener('click', () => deleteBot(botName));
+        
+        actions.appendChild(btnEdit);
+        actions.appendChild(btnDelete);
+        row.appendChild(nameDiv);
+        row.appendChild(actions);
+        line.appendChild(row);
+        frag.appendChild(line);
+      });
+    }
+    els.botsList.appendChild(frag);
+  }
+
+  function openNewBotModal() {
+    openBotModal(null);
+  }
+
+  function openEditBotModal(botName) {
+    openBotModal(botName);
+  }
+
+  function openBotModal(existingBotName) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '1000';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'panel';
+    dialog.style.position = 'absolute';
+    dialog.style.top = '10%';
+    dialog.style.left = '50%';
+    dialog.style.transform = 'translateX(-50%)';
+    dialog.style.width = 'min(600px, 92vw)';
+    dialog.style.maxHeight = '80vh';
+    dialog.style.overflow = 'auto';
+    dialog.style.padding = '12px';
+    
+    const header = document.createElement('div');
+    header.className = 'flow-header';
+    const title = document.createElement('div');
+    title.className = 'flow-title';
+    title.textContent = existingBotName ? `Edit Bot: ${existingBotName}` : 'New Bot';
+    const actions = document.createElement('div');
+    actions.className = 'toolbar';
+    const btnClose = document.createElement('button');
+    btnClose.className = 'btn';
+    btnClose.textContent = 'Cancel';
+    actions.appendChild(btnClose);
+    header.appendChild(title);
+    header.appendChild(actions);
+    
+    const body = document.createElement('div');
+    body.className = 'steps';
+    
+    const existing = existingBotName ? (botsConfig[existingBotName] || {}) : {};
+    
+    const nameField = document.createElement('div');
+    nameField.className = 'field';
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'label';
+    nameLabel.textContent = 'Bot Name';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = existingBotName || '';
+    nameInput.disabled = !!existingBotName;
+    nameInput.placeholder = 'lowercase_with_underscores';
+    nameField.appendChild(nameLabel);
+    nameField.appendChild(nameInput);
+    
+    const tokenField = document.createElement('div');
+    tokenField.className = 'field';
+    const tokenLabel = document.createElement('div');
+    tokenLabel.className = 'label';
+    tokenLabel.textContent = 'Bot Token';
+    const tokenInput = document.createElement('input');
+    tokenInput.type = 'text';
+    tokenInput.value = existing.token || '';
+    tokenInput.placeholder = 'Telegram bot token';
+    tokenField.appendChild(tokenLabel);
+    tokenField.appendChild(tokenInput);
+    
+    const mainField = document.createElement('div');
+    mainField.className = 'field';
+    const mainLabel = document.createElement('div');
+    mainLabel.className = 'label';
+    mainLabel.textContent = 'Main Bot';
+    const mainCheckbox = document.createElement('input');
+    mainCheckbox.type = 'checkbox';
+    mainCheckbox.checked = existing.is_main || false;
+    mainField.appendChild(mainLabel);
+    mainField.appendChild(mainCheckbox);
+    
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn primary';
+    btnSave.textContent = 'Save';
+    btnSave.style.marginTop = '16px';
+    
+    body.appendChild(nameField);
+    body.appendChild(tokenField);
+    body.appendChild(mainField);
+    body.appendChild(btnSave);
+    
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    const close = () => {
+      overlay.remove();
+    };
+    
+    btnClose.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    
+    btnSave.addEventListener('click', async () => {
+      const name = nameInput.value.trim().toLowerCase();
+      const token = tokenInput.value.trim();
+      const isMain = mainCheckbox.checked;
+      
+      // Validate name (lowercase English letters, numbers, underscores)
+      if (!name || !/^[a-z0-9_]+$/.test(name)) {
+        alert('Bot name must be lowercase English letters, numbers, and underscores only.');
+        return;
+      }
+      
+      if (!token) {
+        alert('Bot token is required.');
+        return;
+      }
+      
+      // If setting as main, unset other main bots
+      if (isMain) {
+        for (const [bn, cfg] of Object.entries(botsConfig)) {
+          if (bn !== name && cfg && cfg.is_main) {
+            cfg.is_main = false;
+          }
+        }
+        mainBotName = name;
+      } else if (existingBotName === mainBotName) {
+        // Unsetting main bot
+        mainBotName = null;
+      }
+      
+      botsConfig[name] = { token, is_main: isMain };
+      const saved = await saveBotsConfig();
+      if (saved) {
+        await loadBotsConfig();
+        renderBotsList();
+        close();
+        showToast('Bot saved successfully');
+      }
+    });
+  }
+
+  async function deleteBot(botName) {
+    const sure = confirm(`Delete bot "${botName}"? This will remove it from the configuration.`);
+    if (!sure) return;
+    delete botsConfig[botName];
+    if (botName === mainBotName) {
+      mainBotName = null;
+    }
+    const saved = await saveBotsConfig();
+    if (saved) {
+      await loadBotsConfig();
+      renderBotsList();
+      showToast('Bot deleted');
+    }
+  }
+
+  // Add button to header to open bot management
+  const btnManageBots = document.createElement('button');
+  btnManageBots.className = 'btn';
+  btnManageBots.textContent = 'Manage Bots';
+  btnManageBots.addEventListener('click', async () => {
+    await loadBotsConfig();
+    renderBotsList();
+    els.botsPanel.style.display = 'block';
+  });
+  els.btnNewFlow.parentNode.insertBefore(btnManageBots, els.btnNewFlow);
+
+  // Folder management functions
+  // folders.txt format: JSON object mapping flow keys to folder paths (e.g., { "flow1": "folder1/subfolder", "flow2": "folder1" })
+  let foldersMap = {}; // { flowKey: "folder/path" }
+  let currentFolderPath = ''; // Current folder being viewed (empty string = root)
+
+  async function loadFoldersMap() {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket || !hasValidToken()) {
+        foldersMap = {};
+        return;
+      }
+      const res = await fetch(gcsDownloadUrl(bucket, 'folders.txt'), {
+        headers: { Authorization: `Bearer ${oauth.accessToken}` },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const text = await res.text();
+        try {
+          foldersMap = JSON.parse(text) || {};
+        } catch (_) {
+          foldersMap = {};
+        }
+      } else {
+        foldersMap = {};
+      }
+    } catch (_) {
+      foldersMap = {};
+    }
+  }
+
+  async function saveFoldersMap() {
+    try {
+      const { bucket } = getCfg();
+      if (!bucket || !hasValidToken()) {
+        alert('Please sign in first.');
+        return false;
+      }
+      const token = oauth.accessToken;
+      const body = JSON.stringify(foldersMap, null, 2);
+      const res = await fetch(gcsUploadUrl(bucket, 'folders.txt'), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: body
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) throw new Error('401');
+        throw new Error('Failed to save folders');
+      }
+      return true;
+    } catch (e) {
+      console.error('Save folders error:', e);
+      if (String(e && e.message || '').includes('401')) {
+        showAuthToast('Authentication failed. Sign in to continue.', async () => { await saveFoldersMap(); });
+        return false;
+      }
+      alert('Failed to save folders: ' + (e.message || e));
+      return false;
+    }
+  }
+
+  function getFlowsInFolder(folderPath) {
+    // Get flows that belong to this folder path
+    return flowKeys.filter(key => {
+      const flowFolder = foldersMap[key] || '';
+      return flowFolder === folderPath;
+    });
+  }
+
+  function getSubfoldersInFolder(folderPath) {
+    // Get immediate subfolders of this folder path
+    const subfolders = new Set();
+    Object.values(foldersMap).forEach(path => {
+      if (!path) return;
+      if (folderPath === '') {
+        // Root level: get first-level folders
+        const parts = path.split('/');
+        if (parts.length > 0 && parts[0]) {
+          subfolders.add(parts[0]);
+        }
+      } else if (path.startsWith(folderPath + '/')) {
+        // Subfolder of current folder
+        const relative = path.slice(folderPath.length + 1);
+        const parts = relative.split('/');
+        if (parts.length > 0 && parts[0]) {
+          subfolders.add(folderPath + '/' + parts[0]);
+        }
+      }
+    });
+    return Array.from(subfolders).sort();
+  }
 
   // Init
   loadConfig();
