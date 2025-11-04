@@ -897,7 +897,7 @@
     const subfolders = getSubfoldersInFolder(currentFolderPath);
     const keys = flowKeys && flowKeys.length ? flowKeys : Object.keys(flows);
     const flowsInCurrentFolder = flowsInFolder.filter(k => keys.includes(k));
-    
+
     if (subfolders.length === 0 && flowsInCurrentFolder.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
@@ -905,7 +905,7 @@
       els.flows.appendChild(empty);
       return;
     }
-    
+
     // Container for draggable items
     const itemsContainer = document.createElement('div');
     itemsContainer.style.display = 'flex';
@@ -3732,8 +3732,7 @@
     try {
       const { bucket } = getCfg();
       if (!bucket || !hasValidToken()) {
-        // Fallback: try to load from environment variable via backend API if available
-        // For now, use empty config
+        // Not signed in or no bucket configured - use empty config
         botsConfig = {};
         mainBotName = null;
         return;
@@ -3747,18 +3746,31 @@
         if (json && typeof json === 'object') {
           botsConfig = json;
           // Find main bot
+          mainBotName = null;
           for (const [name, config] of Object.entries(botsConfig)) {
             if (config && config.is_main) {
               mainBotName = name;
               break;
             }
           }
+        } else {
+          // Invalid JSON structure
+          botsConfig = {};
+          mainBotName = null;
         }
+      } else if (res.status === 404) {
+        // File doesn't exist yet - this is fine, start with empty config
+        botsConfig = {};
+        mainBotName = null;
       } else {
+        // Other error (permission denied, etc.)
+        console.warn('Failed to load bots_config.json:', res.status, res.statusText);
         botsConfig = {};
         mainBotName = null;
       }
-    } catch (_) {
+    } catch (err) {
+      // Network error or other exception
+      console.warn('Error loading bots config:', err);
       botsConfig = {};
       mainBotName = null;
     }
@@ -3795,13 +3807,25 @@
   }
 
   function renderBotsList() {
+    if (!els.botsList) {
+      console.error('botsList element not found');
+      return;
+    }
     els.botsList.innerHTML = '';
     const frag = document.createDocumentFragment();
+    
+    // Ensure botsConfig is initialized
+    if (!botsConfig || typeof botsConfig !== 'object') {
+      botsConfig = {};
+    }
+    
     const bots = Object.keys(botsConfig).sort();
     if (bots.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.textContent = 'No bots configured. Click "New Bot" to add one.';
+      empty.style.padding = '40px';
+      empty.style.textAlign = 'center';
+      empty.innerHTML = '<div style="margin-bottom: 16px;">No bots configured yet.</div><div style="color: var(--muted); font-size: 12px;">Click "New Bot" above to add your first bot.</div>';
       frag.appendChild(empty);
     } else {
       bots.forEach((botName) => {
@@ -4012,9 +4036,28 @@
   btnManageBots.className = 'btn';
   btnManageBots.textContent = 'Manage Bots';
   btnManageBots.addEventListener('click', async () => {
-    await loadBotsConfig();
-    renderBotsList();
-    els.botsPanel.style.display = 'block';
+    try {
+      // Ensure botsConfig is initialized
+      if (!botsConfig) {
+        botsConfig = {};
+        mainBotName = null;
+      }
+      await loadBotsConfig();
+      renderBotsList();
+      // Make sure panel is visible
+      els.botsPanel.style.display = 'block';
+      els.botsPanel.style.position = 'fixed';
+      els.botsPanel.style.top = '10%';
+      els.botsPanel.style.left = '50%';
+      els.botsPanel.style.transform = 'translateX(-50%)';
+      els.botsPanel.style.width = 'min(800px, 90vw)';
+      els.botsPanel.style.maxHeight = '80vh';
+      els.botsPanel.style.overflow = 'auto';
+      els.botsPanel.style.zIndex = '1500';
+    } catch (err) {
+      console.error('Error opening bot management:', err);
+      alert('Failed to open bot management: ' + (err.message || err));
+    }
   });
   els.btnNewFlow.parentNode.insertBefore(btnManageBots, els.btnNewFlow);
 
