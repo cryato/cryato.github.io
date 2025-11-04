@@ -835,7 +835,21 @@
       k.textContent = key;
       const t = document.createElement('div');
       t.className = 'flow-trigger';
-      const trig = (def && def.trigger) ? def.trigger : (triggersMap.get(key) || '');
+      let trig = '';
+      if (def && Array.isArray(def.triggers) && def.triggers.length > 0) {
+        trig = def.triggers.map(t => {
+          if (t.type === 'command') {
+            const val = t.value.startsWith('/') ? t.value : `/${t.value}`;
+            return val;
+          } else {
+            return `"${t.value}"`;
+          }
+        }).join(', ');
+      } else if (def && def.trigger) {
+        trig = def.trigger;
+      } else {
+        trig = triggersMap.get(key) || '';
+      }
       t.textContent = trig;
       meta.appendChild(k);
       meta.appendChild(t);
@@ -868,7 +882,20 @@
     head.className = 'flow-header';
     const title = document.createElement('div');
     title.className = 'flow-title';
-    title.textContent = currentFlowKey + (def.trigger ? '  ·  ' + def.trigger : '');
+    let triggerDisplay = '';
+    if (Array.isArray(def.triggers) && def.triggers.length > 0) {
+      triggerDisplay = def.triggers.map(t => {
+        if (t.type === 'command') {
+          const val = t.value.startsWith('/') ? t.value : `/${t.value}`;
+          return val;
+        } else {
+          return `"${t.value}"`;
+        }
+      }).join(', ');
+    } else if (def.trigger) {
+      triggerDisplay = def.trigger;
+    }
+    title.textContent = currentFlowKey + (triggerDisplay ? '  ·  ' + triggerDisplay : '');
     try { if (currentFlowKey) document.title = currentFlowKey; } catch (_) {}
     const desc = document.createElement('div');
     desc.className = 'flow-desc';
@@ -880,6 +907,108 @@
     // Editable flow description
     const descField = fieldText('description', def.description || '', (v) => { def.description = v; });
     els.steps.appendChild(descField);
+
+    // Editable flow triggers
+    const triggersWrap = document.createElement('div');
+    triggersWrap.className = 'field';
+    const triggersLabel = document.createElement('div');
+    triggersLabel.className = 'label';
+    triggersLabel.textContent = 'Triggers';
+    const triggersContainer = document.createElement('div');
+    triggersContainer.style.display = 'flex';
+    triggersContainer.style.flexDirection = 'column';
+    triggersContainer.style.gap = '8px';
+
+    function renderTriggers() {
+      triggersContainer.innerHTML = '';
+      const triggers = Array.isArray(def.triggers) ? def.triggers : [];
+      // Also show legacy trigger if it exists
+      if (def.trigger && typeof def.trigger === 'string' && !triggers.some(t => t.type === 'command' && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
+        triggers.push({ type: 'command', value: def.trigger.replace(/^\//, '') });
+      }
+      
+      triggers.forEach((trigger, idx) => {
+        const triggerRow = document.createElement('div');
+        triggerRow.style.display = 'flex';
+        triggerRow.style.gap = '8px';
+        triggerRow.style.alignItems = 'center';
+        
+        const typeSel = document.createElement('select');
+        typeSel.style.flex = '0 0 120px';
+        ['command', 'keyword'].forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t === 'command' ? 'Command (/...)' : 'Keyword/Phrase';
+          if (trigger.type === t) opt.selected = true;
+          typeSel.appendChild(opt);
+        });
+        
+        const valueInput = document.createElement('input');
+        valueInput.type = 'text';
+        valueInput.style.flex = '1';
+        valueInput.value = trigger.value || '';
+        valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+        
+        const btnRemove = document.createElement('button');
+        btnRemove.className = 'btn';
+        btnRemove.textContent = 'Remove';
+        btnRemove.style.flex = '0 0 auto';
+        
+        typeSel.addEventListener('change', () => {
+          trigger.type = typeSel.value;
+          valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+          saveTriggers();
+        });
+        
+        valueInput.addEventListener('input', () => {
+          trigger.value = valueInput.value.trim();
+          saveTriggers();
+        });
+        
+        btnRemove.addEventListener('click', () => {
+          triggers.splice(idx, 1);
+          renderTriggers();
+          saveTriggers();
+        });
+        
+        triggerRow.appendChild(typeSel);
+        triggerRow.appendChild(valueInput);
+        triggerRow.appendChild(btnRemove);
+        triggersContainer.appendChild(triggerRow);
+      });
+      
+      const btnAdd = document.createElement('button');
+      btnAdd.className = 'btn';
+      btnAdd.textContent = '+ Add Trigger';
+      btnAdd.style.marginTop = '4px';
+      btnAdd.addEventListener('click', () => {
+        if (!Array.isArray(def.triggers)) def.triggers = [];
+        def.triggers.push({ type: 'command', value: '' });
+        renderTriggers();
+        saveTriggers();
+      });
+      triggersContainer.appendChild(btnAdd);
+    }
+    
+    function saveTriggers() {
+      // Remove legacy trigger if we have triggers array
+      if (Array.isArray(def.triggers) && def.triggers.length > 0) {
+        // Find first command trigger and use it as legacy trigger for backward compatibility
+        const firstCommand = def.triggers.find(t => t.type === 'command');
+        if (firstCommand) {
+          def.trigger = firstCommand.value.startsWith('/') ? firstCommand.value : `/${firstCommand.value}`;
+        } else {
+          delete def.trigger;
+        }
+      } else {
+        delete def.triggers;
+      }
+    }
+    
+    renderTriggers();
+    triggersWrap.appendChild(triggersLabel);
+    triggersWrap.appendChild(triggersContainer);
+    els.steps.appendChild(triggersWrap);
 
     const steps = Array.isArray(def.steps) ? def.steps : [];
 
