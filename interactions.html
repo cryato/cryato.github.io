@@ -456,7 +456,8 @@
         : (st.sheets_find_row ? 'sheets_find_row'
         : (st.sheets_get_row ? 'sheets_get_row'
         : (st.script ? 'script'
-        : (st.send_invoice ? 'send_invoice' : 'step')))))))))))));
+        : (st.send_invoice ? 'send_invoice'
+        : (st.close_open_questions ? 'close_open_questions' : 'step'))))))))))))));
       badge.textContent = type.toUpperCase();
       const idxEl = document.createElement('span');
       idxEl.style.color = '#94a3b8'; idxEl.style.fontSize = '12px'; idxEl.style.marginLeft = '8px';
@@ -519,6 +520,18 @@
         const l4 = document.createElement('div'); l4.className = 'label'; l4.textContent = 'verification';
         const verSel = document.createElement('select'); ['','strict','email','time'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || '(none)'; verSel.appendChild(o); }); verSel.value = typeof step.verification === 'string' ? step.verification : ''; verSel.style.background = 'rgba(17,24,39,0.6)'; verSel.style.border = '1px solid #1f2937'; verSel.style.color = '#e5e7eb'; verSel.style.borderRadius = '8px'; verSel.style.padding = '4px 6px'; verSel.disabled = !editable; if (editable) verSel.addEventListener('change', () => { const v = verSel.value; if (v) step.verification = v; else delete step.verification; });
         f4.appendChild(l4); f4.appendChild(verSel); container.appendChild(f4);
+        return;
+      }
+
+      // CLOSE_OPEN_QUESTIONS
+      if (step.close_open_questions != null) {
+        const info = document.createElement('div');
+        info.className = 'field';
+        info.style.color = '#94a3b8';
+        info.style.fontSize = '14px';
+        info.style.padding = '8px';
+        info.textContent = 'This step will close all open questions (cancel awaiting flows) without creating a new question.';
+        container.appendChild(info);
         return;
       }
 

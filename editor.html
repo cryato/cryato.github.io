@@ -1135,7 +1135,8 @@
         : step.sheets_get_row ? 'sheets_get_row'
         : step.schedule ? 'schedule'
         : step.script ? 'script'
-        : step.send_invoice ? 'send_invoice' : 'step';
+        : step.send_invoice ? 'send_invoice'
+        : step.close_open_questions ? 'close_open_questions' : 'step';
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = type.toUpperCase();
@@ -1204,6 +1205,19 @@
       verSel.addEventListener('change', () => { const v = verSel.value; if (v) step.verification = v; else delete step.verification; });
       verWrap.appendChild(verLabel); verWrap.appendChild(verSel);
       container.appendChild(verWrap);
+      return;
+    }
+
+    // CLOSE_OPEN_QUESTIONS
+    if (step.close_open_questions != null) {
+      // This step type doesn't require any configuration - it just closes open questions
+      const info = document.createElement('div');
+      info.className = 'field';
+      info.style.color = '#94a3b8';
+      info.style.fontSize = '14px';
+      info.style.padding = '8px';
+      info.textContent = 'This step will close all open questions (cancel awaiting flows) without creating a new question.';
+      container.appendChild(info);
       return;
     }
 
@@ -1984,6 +1998,7 @@
     const types = [
       { v: 'say', n: 'Say (bot message)' },
       { v: 'ask', n: 'Ask (await user answer)' },
+      { v: 'close_open_questions', n: 'Close open questions' },
       { v: 'wait', n: 'Wait' },
       { v: 'schedule', n: 'Schedule (pause until time in timezone)' },
       { v: 'label', n: 'Label' },
@@ -2045,6 +2060,13 @@
         formWrap.appendChild(field('saveAs', save));
         formWrap.appendChild(field('keyboard', kb));
         formWrap.appendChild(field('verification', ver));
+      } else if (t === 'close_open_questions') {
+        const info = document.createElement('div');
+        info.style.color = '#94a3b8';
+        info.style.fontSize = '14px';
+        info.style.padding = '8px';
+        info.textContent = 'This step will close all open questions (cancel awaiting flows) without creating a new question.';
+        formWrap.appendChild(info);
       } else if (t === 'wait') {
         const days = document.createElement('input'); days.type = 'number'; days.placeholder = 'Days'; days.min = '0';
         const hours = document.createElement('input'); hours.type = 'number'; hours.placeholder = 'Hours'; hours.min = '0';
@@ -2193,6 +2215,8 @@
         if (save && save.value) step.saveAs = String(save.value);
         if (kb && kb.value) step.keyboard = kb.value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
         if (ver && ver.value) step.verification = ver.value;
+      } else if (t === 'close_open_questions') {
+        step.close_open_questions = true;
       } else if (t === 'wait') {
         const nums = formWrap.querySelectorAll('input[type="number"]');
         const d = Number(nums && nums[0] && nums[0].value);
