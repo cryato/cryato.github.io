@@ -838,13 +838,13 @@
       let trig = '';
       if (def && Array.isArray(def.triggers) && def.triggers.length > 0) {
         trig = def.triggers.map(t => {
-          if (t.type === 'command') {
-            const val = t.value.startsWith('/') ? t.value : `/${t.value}`;
-            return val;
-          } else if (t.type === 'catch_all') {
+          if (t.type === 'catch_all') {
             return '(catch-all)';
           } else {
-            return `"${t.value}"`;
+            // Show trigger value as-is, adding / prefix if it starts with / or is a command-like value
+            const val = t.value || '';
+            // If value starts with /, show it; otherwise show as-is (could be keyword/phrase)
+            return val.startsWith('/') ? val : `"${val}"`;
           }
         }).join(', ');
       } else if (def && def.trigger) {
@@ -886,23 +886,23 @@
     head.className = 'flow-header';
     const title = document.createElement('div');
     title.className = 'flow-title';
-    let triggerDisplay = '';
-    if (Array.isArray(def.triggers) && def.triggers.length > 0) {
-      triggerDisplay = def.triggers.map(t => {
-        if (t.type === 'command') {
-          const val = t.value.startsWith('/') ? t.value : `/${t.value}`;
-          return val;
-        } else if (t.type === 'catch_all') {
-          return '(catch-all)';
-        } else {
-          return `"${t.value}"`;
-        }
-      }).join(', ');
-    } else if (def.trigger) {
-      triggerDisplay = def.trigger;
-    } else if (def.type === 'catch_all') {
-      triggerDisplay = '(catch-all)';
-    }
+      let triggerDisplay = '';
+      if (Array.isArray(def.triggers) && def.triggers.length > 0) {
+        triggerDisplay = def.triggers.map(t => {
+          if (t.type === 'catch_all') {
+            return '(catch-all)';
+          } else {
+            // Show trigger value as-is, adding / prefix if it starts with / or is a command-like value
+            const val = t.value || '';
+            // If value starts with /, show it; otherwise show as-is (could be keyword/phrase)
+            return val.startsWith('/') ? val : `"${val}"`;
+          }
+        }).join(', ');
+      } else if (def.trigger) {
+        triggerDisplay = def.trigger;
+      } else if (def.type === 'catch_all') {
+        triggerDisplay = '(catch-all)';
+      }
     title.textContent = currentFlowKey + (triggerDisplay ? '  ·  ' + triggerDisplay : '');
     try { if (currentFlowKey) document.title = currentFlowKey; } catch (_) {}
     const desc = document.createElement('div');
@@ -936,14 +936,20 @@
       // Migrate legacy trigger to new structure if it exists and triggers array is empty
       if (def.trigger && typeof def.trigger === 'string' && def.triggers.length === 0) {
         const triggerValue = def.trigger.replace(/^\//, '');
-        def.triggers.push({ type: 'command', value: triggerValue });
+        def.triggers.push({ type: 'trigger', value: triggerValue });
         // Remove legacy trigger after migration
         delete def.trigger;
       }
       // Also add legacy trigger if it exists and not already in triggers (for display during editing)
-      if (def.trigger && typeof def.trigger === 'string' && !def.triggers.some(t => t.type === 'command' && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
-        def.triggers.push({ type: 'command', value: def.trigger.replace(/^\//, '') });
+      if (def.trigger && typeof def.trigger === 'string' && !def.triggers.some(t => (t.type === 'trigger' || t.type === 'command' || t.type === 'keyword') && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
+        def.triggers.push({ type: 'trigger', value: def.trigger.replace(/^\//, '') });
       }
+      // Migrate old command/keyword types to unified trigger type
+      def.triggers.forEach(trigger => {
+        if (trigger.type === 'command' || trigger.type === 'keyword' || trigger.type === 'phrase') {
+          trigger.type = 'trigger';
+        }
+      });
       const triggers = def.triggers;
       
       triggers.forEach((trigger, idx) => {
@@ -954,11 +960,11 @@
         
         const typeSel = document.createElement('select');
         typeSel.style.flex = '0 0 120px';
-        ['command', 'keyword', 'catch_all'].forEach(t => {
+        ['trigger', 'catch_all'].forEach(t => {
           const opt = document.createElement('option');
           opt.value = t;
-          opt.textContent = t === 'command' ? 'Command (/...)' : (t === 'keyword' ? 'Keyword/Phrase' : 'Catch-all');
-          if (trigger.type === t) opt.selected = true;
+          opt.textContent = t === 'trigger' ? 'Trigger' : 'Catch-all';
+          if (trigger.type === t || (t === 'trigger' && (trigger.type === 'command' || trigger.type === 'keyword' || trigger.type === 'phrase'))) opt.selected = true;
           typeSel.appendChild(opt);
         });
         
@@ -971,7 +977,13 @@
           valueInput.value = 'catch-all';
         } else {
           valueInput.style.display = '';
-          valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+          // Dynamic placeholder based on current value
+          const updatePlaceholder = () => {
+            const val = valueInput.value.trim();
+            valueInput.placeholder = val.startsWith('/') ? '/start (Telegram command)' : 'help me please (or /start for command)';
+          };
+          updatePlaceholder();
+          valueInput.addEventListener('input', updatePlaceholder);
         }
         
         const globalCheckbox = document.createElement('input');
@@ -1008,7 +1020,8 @@
             valueInput.value = 'catch-all';
           } else {
             valueInput.style.display = '';
-            valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
+            const val = valueInput.value.trim();
+            valueInput.placeholder = val.startsWith('/') ? '/start (Telegram command)' : 'help me please (or /start for command)';
           }
           saveTriggers();
         });
@@ -1054,7 +1067,7 @@
       btnAdd.style.marginTop = '4px';
       btnAdd.addEventListener('click', () => {
         if (!Array.isArray(def.triggers)) def.triggers = [];
-        def.triggers.push({ type: 'command', value: '' });
+        def.triggers.push({ type: 'trigger', value: '' });
         renderTriggers();
         saveTriggers();
       });
@@ -2457,8 +2470,8 @@
 
     const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'flow key (e.g., orders)';
     const typeSel = document.createElement('select');
-    ;[['chat','Chat (triggered by command)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)'], ['catch_all','Catch-all (triggered when no other flow matches)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
-    const triggerInput = document.createElement('input'); triggerInput.type = 'text'; triggerInput.placeholder = '/orders (for chat) or orders (for webhook)';
+    ;[['chat','Chat (triggered by command or keyword)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)'], ['catch_all','Catch-all (triggered when no other flow matches)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
+    const triggerInput = document.createElement('input'); triggerInput.type = 'text'; triggerInput.placeholder = '/orders or help me (for chat) or orders (for webhook)';
     const descInput = document.createElement('input'); descInput.type = 'text'; descInput.placeholder = 'optional description';
 
     function updateTriggerPlaceholder() {
@@ -2473,7 +2486,7 @@
         triggerInput.style.display = 'none';
         triggerInput.value = '';
       } else {
-        triggerInput.placeholder = '/orders (Telegram command)';
+        triggerInput.placeholder = '/orders (command) or help me (keyword/phrase)';
         triggerInput.style.display = '';
       }
     }
@@ -2517,7 +2530,9 @@
           def.triggers = [{ type: 'catch_all', value: 'catch-all' }];
           def.description = def.description || 'Triggers when no other flow matches';
         } else {
-          def.trigger = trigger || ('/' + key);
+          // Use triggers array format - treat trigger value as-is (command if starts with /, keyword otherwise)
+          const triggerValue = trigger || ('/' + key);
+          def.triggers = [{ type: 'trigger', value: triggerValue }];
           def.steps = [{ say: 'Hello! This is a new flow.' }];
         }
 
