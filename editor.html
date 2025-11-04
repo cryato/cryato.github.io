@@ -1078,6 +1078,18 @@
     triggersWrap.appendChild(triggersContainer);
     els.steps.appendChild(triggersWrap);
 
+    // Flow filters editor
+    const filtersWrap = document.createElement('div');
+    filtersWrap.className = 'field';
+    const filtersLabel = document.createElement('div');
+    filtersLabel.className = 'label';
+    filtersLabel.textContent = 'Filters';
+    filtersLabel.style.marginBottom = '4px';
+    const filtersEditor = buildFiltersEditor(def, true);
+    filtersWrap.appendChild(filtersLabel);
+    filtersWrap.appendChild(filtersEditor);
+    els.steps.appendChild(filtersWrap);
+
     const steps = Array.isArray(def.steps) ? def.steps : [];
 
     // Insert button before the first step
