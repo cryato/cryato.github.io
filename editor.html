@@ -1599,74 +1599,82 @@
     
     // Ensure def.bots is an array
     if (!Array.isArray(def.bots)) {
+      // Default to main bot if no bots selected
       def.bots = mainBotName ? [mainBotName] : [];
     }
     
-    async function renderBotCheckboxes() {
-      await loadBotsConfig();
-      botsContainer.innerHTML = '';
-      const botNames = Object.keys(botsConfig).sort();
-      if (botNames.length === 0) {
-        const hint = document.createElement('div');
-        hint.className = 'hint';
-        hint.textContent = 'No bots configured. Use "Manage Bots" to add bots.';
-        botsContainer.appendChild(hint);
-      } else {
-        botNames.forEach((botName) => {
-          const row = document.createElement('div');
-          row.style.display = 'flex';
-          row.style.alignItems = 'center';
-          row.style.gap = '8px';
-          
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = def.bots.includes(botName);
-          checkbox.addEventListener('change', () => {
-            if (checkbox.checked) {
-              if (!def.bots.includes(botName)) {
-                def.bots.push(botName);
-              }
-            } else {
-              def.bots = def.bots.filter(b => b !== botName);
-            }
-          });
-          
-          const label = document.createElement('label');
-          label.style.cursor = 'pointer';
-          label.style.display = 'flex';
-          label.style.alignItems = 'center';
-          label.style.gap = '8px';
-          label.textContent = botName;
-          if (botsConfig[botName] && botsConfig[botName].is_main) {
-            const badge = document.createElement('span');
-            badge.className = 'badge';
-            badge.textContent = 'Main';
-            badge.style.fontSize = '10px';
-            label.appendChild(badge);
-          }
-          label.addEventListener('click', (e) => {
-            e.preventDefault();
-            checkbox.checked = !checkbox.checked;
-            checkbox.dispatchEvent(new Event('change'));
-          });
-          
-          row.appendChild(checkbox);
-          row.appendChild(label);
-          botsContainer.appendChild(row);
-        });
-      }
+    // If bots array is empty, default to main bot
+    if (def.bots.length === 0 && mainBotName) {
+      def.bots = [mainBotName];
     }
     
-    renderBotCheckboxes().then(() => {
-      botsField.appendChild(botsLabel);
-      botsField.appendChild(botsContainer);
-      els.steps.appendChild(botsField);
-    }).catch(() => {
-      // If loading fails, still show the field but with empty state
-      botsField.appendChild(botsLabel);
-      botsField.appendChild(botsContainer);
-      els.steps.appendChild(botsField);
-    });
+    await loadBotsConfig();
+    botsContainer.innerHTML = '';
+    const botNames = Object.keys(botsConfig).sort();
+    if (botNames.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = 'No bots configured. Use "Manage Bots" to add bots.';
+      botsContainer.appendChild(hint);
+    } else {
+      botNames.forEach((botName) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        // If no bots selected and this is the main bot, check it by default
+        let isChecked = def.bots.includes(botName);
+        if (!isChecked && def.bots.length === 0 && botName === mainBotName) {
+          isChecked = true;
+          def.bots.push(botName);
+        }
+        checkbox.checked = isChecked;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) {
+            if (!def.bots.includes(botName)) {
+              def.bots.push(botName);
+            }
+          } else {
+            def.bots = def.bots.filter(b => b !== botName);
+            // If main bot was unchecked and array is now empty, re-add main bot
+            if (def.bots.length === 0 && botName === mainBotName) {
+              def.bots.push(mainBotName);
+              checkbox.checked = true;
+            }
+          }
+        });
+        
+        const label = document.createElement('label');
+        label.style.cursor = 'pointer';
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.gap = '8px';
+        label.textContent = botName;
+        if (botsConfig[botName] && botsConfig[botName].is_main) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = 'Main';
+          badge.style.fontSize = '10px';
+          label.appendChild(badge);
+        }
+        label.addEventListener('click', (e) => {
+          e.preventDefault();
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change'));
+        });
+        
+        row.appendChild(checkbox);
+        row.appendChild(label);
+        botsContainer.appendChild(row);
+      });
+    }
+    
+    botsField.appendChild(botsLabel);
+    botsField.appendChild(botsContainer);
+    els.steps.appendChild(botsField);
 
     // Editable flow triggers
     const triggersWrap = document.createElement('div');
