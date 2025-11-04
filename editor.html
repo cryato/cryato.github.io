@@ -925,11 +925,18 @@
       if (!Array.isArray(def.triggers)) {
         def.triggers = [];
       }
-      const triggers = def.triggers;
-      // Also show legacy trigger if it exists
-      if (def.trigger && typeof def.trigger === 'string' && !triggers.some(t => t.type === 'command' && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
-        triggers.push({ type: 'command', value: def.trigger.replace(/^\//, '') });
+      // Migrate legacy trigger to new structure if it exists and triggers array is empty
+      if (def.trigger && typeof def.trigger === 'string' && def.triggers.length === 0) {
+        const triggerValue = def.trigger.replace(/^\//, '');
+        def.triggers.push({ type: 'command', value: triggerValue });
+        // Remove legacy trigger after migration
+        delete def.trigger;
       }
+      // Also add legacy trigger if it exists and not already in triggers (for display during editing)
+      if (def.trigger && typeof def.trigger === 'string' && !def.triggers.some(t => t.type === 'command' && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
+        def.triggers.push({ type: 'command', value: def.trigger.replace(/^\//, '') });
+      }
+      const triggers = def.triggers;
       
       triggers.forEach((trigger, idx) => {
         const triggerRow = document.createElement('div');
@@ -1033,17 +1040,18 @@
     }
     
     function saveTriggers() {
-      // Remove legacy trigger if we have triggers array
+      // Only save triggers array, remove legacy trigger field
       if (Array.isArray(def.triggers) && def.triggers.length > 0) {
-        // Find first command trigger and use it as legacy trigger for backward compatibility
-        const firstCommand = def.triggers.find(t => t.type === 'command');
-        if (firstCommand) {
-          def.trigger = firstCommand.value.startsWith('/') ? firstCommand.value : `/${firstCommand.value}`;
-        } else {
-          delete def.trigger;
+        // Remove legacy trigger field - we only use triggers array now
+        delete def.trigger;
+        // Clean up any empty triggers
+        def.triggers = def.triggers.filter(t => t && t.value && String(t.value).trim().length > 0);
+        if (def.triggers.length === 0) {
+          delete def.triggers;
         }
       } else {
         delete def.triggers;
+        delete def.trigger;
       }
     }
     
