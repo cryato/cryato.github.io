@@ -921,7 +921,11 @@
 
     function renderTriggers() {
       triggersContainer.innerHTML = '';
-      const triggers = Array.isArray(def.triggers) ? def.triggers : [];
+      // Ensure we're working with the actual triggers array from def
+      if (!Array.isArray(def.triggers)) {
+        def.triggers = [];
+      }
+      const triggers = def.triggers;
       // Also show legacy trigger if it exists
       if (def.trigger && typeof def.trigger === 'string' && !triggers.some(t => t.type === 'command' && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
         triggers.push({ type: 'command', value: def.trigger.replace(/^\//, '') });
@@ -954,7 +958,10 @@
         globalCheckbox.style.flex = '0 0 auto';
         globalCheckbox.style.width = 'auto';
         globalCheckbox.style.marginRight = '4px';
-        globalCheckbox.checked = trigger.global === true;
+        // Check for global property - ensure we read the actual property value
+        // Use a more robust check that handles the property correctly
+        const isGlobalSet = trigger.hasOwnProperty('global') && (trigger.global === true || trigger.global === 'true');
+        globalCheckbox.checked = isGlobalSet;
         globalCheckbox.title = 'Global: trigger even if another flow is active';
         
         const globalLabel = document.createElement('label');
