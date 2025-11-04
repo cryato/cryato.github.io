@@ -808,8 +808,26 @@
         }
       } catch (_) {}
 
-      // Load selected flow if any
+      // Load folders map first
+      await loadFoldersMap();
+
+      // If flow is opened via URL, ensure it's in its own folder
       if (sel) {
+        // Check if flow has a folder assignment
+        if (!foldersMap[sel] || foldersMap[sel] === '') {
+          // Assign flow to a folder named after itself
+          foldersMap[sel] = sel;
+          // Save the folders map if we have valid auth
+          if (hasValidToken()) {
+            try {
+              await saveFoldersMap();
+            } catch (_) {
+              // If save fails, continue anyway
+            }
+          }
+        }
+        // Navigate to the flow's folder
+        currentFolderPath = foldersMap[sel] || '';
         await loadSingleFlow(sel);
       } else {
         flowDoc = { flows: {} };
