@@ -949,6 +949,25 @@
         valueInput.value = trigger.value || '';
         valueInput.placeholder = trigger.type === 'command' ? 'start' : 'help me please';
         
+        const globalCheckbox = document.createElement('input');
+        globalCheckbox.type = 'checkbox';
+        globalCheckbox.style.flex = '0 0 auto';
+        globalCheckbox.style.width = 'auto';
+        globalCheckbox.style.marginRight = '4px';
+        globalCheckbox.checked = trigger.global === true;
+        globalCheckbox.title = 'Global: trigger even if another flow is active';
+        
+        const globalLabel = document.createElement('label');
+        globalLabel.textContent = 'Global';
+        globalLabel.style.fontSize = '12px';
+        globalLabel.style.color = 'var(--muted)';
+        globalLabel.style.cursor = 'pointer';
+        globalLabel.style.display = 'flex';
+        globalLabel.style.alignItems = 'center';
+        globalLabel.style.gap = '4px';
+        globalLabel.style.flex = '0 0 auto';
+        globalLabel.appendChild(globalCheckbox);
+        
         const btnRemove = document.createElement('button');
         btnRemove.className = 'btn';
         btnRemove.textContent = 'Remove';
@@ -965,6 +984,21 @@
           saveTriggers();
         });
         
+        globalCheckbox.addEventListener('change', () => {
+          if (globalCheckbox.checked) {
+            trigger.global = true;
+          } else {
+            delete trigger.global;
+          }
+          saveTriggers();
+        });
+        
+        globalLabel.addEventListener('click', (e) => {
+          if (e.target !== globalCheckbox) {
+            globalCheckbox.click();
+          }
+        });
+        
         btnRemove.addEventListener('click', () => {
           triggers.splice(idx, 1);
           renderTriggers();
@@ -973,6 +1007,7 @@
         
         triggerRow.appendChild(typeSel);
         triggerRow.appendChild(valueInput);
+        triggerRow.appendChild(globalLabel);
         triggerRow.appendChild(btnRemove);
         triggersContainer.appendChild(triggerRow);
       });
