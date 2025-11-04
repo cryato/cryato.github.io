@@ -53,6 +53,7 @@
     .badge.warn { color: #fecaca; border-color: #7f1d1d; background: rgba(127,29,29,0.25); }
     .insert-row.drop-active .btn { border-color: rgba(34,211,238,0.9); background: linear-gradient(180deg, rgba(34,211,238,0.28) 0%, rgba(34,211,238,0.16) 100%); color: #e0f2fe; }
     .insert-row.drop-active div[style*="height: 1px"] { background: #22d3ee !important; }
+    .flow-item.drag-over { border-color: rgba(34,211,238,0.9); background: rgba(34,211,238,0.1); }
     /* Toasts */
     .toast { position: fixed; right: 16px; bottom: 16px; max-width: 520px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid #1f2937; background: rgba(17,24,39,0.9); box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03); z-index: 2000; }
     .toast .msg { font-size: 13px; color: var(--text); }
@@ -873,7 +874,23 @@
       });
     }
     
+    // Add "New Folder" button
+    const toolbar = document.createElement('div');
+    toolbar.style.display = 'flex';
+    toolbar.style.justifyContent = 'space-between';
+    toolbar.style.alignItems = 'center';
+    toolbar.style.marginBottom = '12px';
+    toolbar.style.padding = '8px';
+    
+    const btnNewFolder = document.createElement('button');
+    btnNewFolder.className = 'btn primary';
+    btnNewFolder.textContent = 'New Folder';
+    btnNewFolder.style.fontSize = '12px';
+    btnNewFolder.addEventListener('click', () => openCreateFolderModal());
+    toolbar.appendChild(btnNewFolder);
+    
     els.flows.appendChild(breadcrumbs);
+    els.flows.appendChild(toolbar);
     
     // Get flows and folders in current folder
     const flowsInFolder = getFlowsInFolder(currentFolderPath);
@@ -889,6 +906,12 @@
       return;
     }
     
+    // Container for draggable items
+    const itemsContainer = document.createElement('div');
+    itemsContainer.style.display = 'flex';
+    itemsContainer.style.flexDirection = 'column';
+    itemsContainer.style.gap = '4px';
+    
     // Render folders first
     subfolders.forEach((folderPath) => {
       const parts = folderPath.split('/');
@@ -896,11 +919,15 @@
       const item = document.createElement('div');
       item.className = 'flow-item';
       item.style.cursor = 'pointer';
+      item.draggable = true;
+      item.dataset.folderPath = folderPath;
+      item.dataset.type = 'folder';
       
       const icon = document.createElement('div');
       icon.innerHTML = '📁';
       
       const meta = document.createElement('div');
+      meta.style.flex = '1';
       const k = document.createElement('div');
       k.className = 'flow-key';
       k.textContent = folderName;
@@ -908,11 +935,63 @@
       
       item.appendChild(icon);
       item.appendChild(meta);
-      item.addEventListener('click', () => {
+      
+      // Click to navigate
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.folder-actions')) return;
         currentFolderPath = folderPath;
         renderFlows();
       });
-      els.flows.appendChild(item);
+      
+      // Context menu for folder operations
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openFolderContextMenu(e, folderPath, folderName);
+      });
+      
+      // Drag and drop handlers
+      item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'folder', path: folderPath }));
+        item.style.opacity = '0.5';
+      });
+      
+      item.addEventListener('dragend', () => {
+        item.style.opacity = '1';
+      });
+      
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (!item.classList.contains('drag-over')) {
+          item.classList.add('drag-over');
+        }
+      });
+      
+      item.addEventListener('dragleave', () => {
+        item.classList.remove('drag-over');
+      });
+      
+      item.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        item.classList.remove('drag-over');
+        try {
+          const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+          if (data.type === 'flow') {
+            // Move flow to this folder
+            foldersMap[data.flowKey] = folderPath;
+            await saveFoldersMap();
+            await loadFoldersMap();
+            await renderFlows();
+            showToast('Flow moved to folder');
+          } else if (data.type === 'folder' && data.path !== folderPath) {
+            // Move folder (rename path)
+            await moveFolderToFolder(data.path, folderPath);
+          }
+        } catch (_) {}
+      });
+      
+      itemsContainer.appendChild(item);
     });
     
     // Render flows
@@ -921,11 +1000,15 @@
       const item = document.createElement('a');
       item.href = `?flow=${encodeURIComponent(key)}`;
       item.className = 'flow-item' + (selected === key ? ' active' : '');
+      item.draggable = true;
+      item.dataset.flowKey = key;
+      item.dataset.type = 'flow';
 
       const icon = document.createElement('div');
       icon.innerHTML = '⚡️';
 
       const meta = document.createElement('div');
+      meta.style.flex = '1';
       const k = document.createElement('div');
       k.className = 'flow-key';
       k.textContent = key;
@@ -955,14 +1038,334 @@
       item.appendChild(icon);
       item.appendChild(meta);
       
+      // Drag handlers
+      item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'flow', flowKey: key }));
+        item.style.opacity = '0.5';
+      });
+      
+      item.addEventListener('dragend', () => {
+        item.style.opacity = '1';
+      });
+      
       // Add context menu for moving to folder
       item.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         openMoveFlowMenu(e, key);
       });
       
-      els.flows.appendChild(item);
+      itemsContainer.appendChild(item);
     });
+    
+    els.flows.appendChild(itemsContainer);
+    
+    // Add drop zone for root folder
+    itemsContainer.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    
+    itemsContainer.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+        if (data.type === 'flow') {
+          // Move flow to root
+          delete foldersMap[data.flowKey];
+          await saveFoldersMap();
+          await loadFoldersMap();
+          await renderFlows();
+          showToast('Flow moved to root');
+        } else if (data.type === 'folder') {
+          // Move folder to root (remove from folder)
+          await moveFolderToFolder(data.path, '');
+        }
+      } catch (_) {}
+    });
+  }
+  
+  async function moveFolderToFolder(sourcePath, targetPath) {
+    // Move all flows from source folder to target folder
+    const flowsToMove = [];
+    Object.entries(foldersMap).forEach(([flowKey, path]) => {
+      if (path === sourcePath || path.startsWith(sourcePath + '/')) {
+        flowsToMove.push({ flowKey, oldPath: path });
+      }
+    });
+    
+    if (flowsToMove.length === 0) return;
+    
+    flowsToMove.forEach(({ flowKey, oldPath }) => {
+      if (targetPath === '') {
+        // Moving to root - remove folder prefix
+        delete foldersMap[flowKey];
+      } else {
+        // Moving to another folder - replace prefix
+        const relativePath = oldPath.startsWith(sourcePath + '/') 
+          ? oldPath.slice(sourcePath.length + 1)
+          : '';
+        foldersMap[flowKey] = relativePath ? `${targetPath}/${relativePath}` : targetPath;
+      }
+    });
+    
+    await saveFoldersMap();
+    await loadFoldersMap();
+    await renderFlows();
+    showToast(`Moved ${flowsToMove.length} flow(s)`);
+  }
+  
+  function openFolderContextMenu(event, folderPath, folderName) {
+    const existing = document.querySelector('.folder-context-menu');
+    if (existing) existing.remove();
+    
+    const menu = document.createElement('div');
+    menu.className = 'folder-context-menu';
+    menu.style.position = 'fixed';
+    menu.style.background = 'rgba(17,24,39,0.95)';
+    menu.style.border = '1px solid #1f2937';
+    menu.style.borderRadius = '8px';
+    menu.style.padding = '8px';
+    menu.style.zIndex = '2000';
+    menu.style.minWidth = '200px';
+    
+    const btnRename = document.createElement('button');
+    btnRename.className = 'btn';
+    btnRename.textContent = 'Rename';
+    btnRename.style.width = '100%';
+    btnRename.style.marginBottom = '4px';
+    btnRename.addEventListener('click', () => {
+      menu.remove();
+      openRenameFolderModal(folderPath, folderName);
+    });
+    
+    const btnDelete = document.createElement('button');
+    btnDelete.className = 'btn';
+    btnDelete.textContent = 'Delete';
+    btnDelete.style.width = '100%';
+    btnDelete.style.marginBottom = '4px';
+    btnDelete.addEventListener('click', async () => {
+      menu.remove();
+      await deleteFolder(folderPath);
+    });
+    
+    menu.appendChild(btnRename);
+    menu.appendChild(btnDelete);
+    
+    const x = event.clientX;
+    const y = event.clientY;
+    menu.style.left = Math.max(0, Math.min(x, window.innerWidth - 220)) + 'px';
+    menu.style.top = Math.max(0, Math.min(y, window.innerHeight - 200)) + 'px';
+    
+    document.body.appendChild(menu);
+    
+    const close = () => menu.remove();
+    setTimeout(() => {
+      document.addEventListener('click', close, { once: true });
+      document.addEventListener('contextmenu', close, { once: true });
+    }, 100);
+  }
+  
+  function openCreateFolderModal() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '1000';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'panel';
+    dialog.style.position = 'absolute';
+    dialog.style.top = '20%';
+    dialog.style.left = '50%';
+    dialog.style.transform = 'translateX(-50%)';
+    dialog.style.width = 'min(500px, 92vw)';
+    dialog.style.padding = '12px';
+    
+    const header = document.createElement('div');
+    header.className = 'flow-header';
+    const title = document.createElement('div');
+    title.className = 'flow-title';
+    title.textContent = 'Create Folder';
+    const actions = document.createElement('div');
+    actions.className = 'toolbar';
+    const btnClose = document.createElement('button');
+    btnClose.className = 'btn';
+    btnClose.textContent = 'Cancel';
+    actions.appendChild(btnClose);
+    header.appendChild(title);
+    header.appendChild(actions);
+    
+    const body = document.createElement('div');
+    body.className = 'steps';
+    
+    const folderField = document.createElement('div');
+    folderField.className = 'field';
+    const folderLabel = document.createElement('div');
+    folderLabel.className = 'label';
+    folderLabel.textContent = 'Folder Name';
+    const folderInput = document.createElement('input');
+    folderInput.type = 'text';
+    folderInput.placeholder = 'my_folder';
+    if (currentFolderPath) {
+      folderInput.value = currentFolderPath + '/';
+    }
+    folderField.appendChild(folderLabel);
+    folderField.appendChild(folderInput);
+    
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn primary';
+    btnSave.textContent = 'Create';
+    btnSave.style.marginTop = '16px';
+    
+    body.appendChild(folderField);
+    body.appendChild(btnSave);
+    
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    folderInput.focus();
+    
+    const close = () => overlay.remove();
+    btnClose.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    
+    btnSave.addEventListener('click', async () => {
+      let path = folderInput.value.trim();
+      if (!path) {
+        alert('Folder name is required.');
+        return;
+      }
+      // Ensure path is relative to current folder
+      if (currentFolderPath && !path.startsWith(currentFolderPath)) {
+        path = currentFolderPath ? `${currentFolderPath}/${path}` : path;
+      }
+      // Create folder by moving a placeholder flow (we'll create an empty entry)
+      // Actually, folders are implicit - they exist when flows are in them
+      // So we just need to ensure the folder structure exists
+      // For now, we'll create a dummy flow entry or just show the folder
+      // Since folders are implicit, we'll just navigate to it
+      currentFolderPath = path;
+      await renderFlows();
+      close();
+      showToast('Folder created (add flows to populate it)');
+    });
+  }
+  
+  function openRenameFolderModal(folderPath, folderName) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '1000';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'panel';
+    dialog.style.position = 'absolute';
+    dialog.style.top = '20%';
+    dialog.style.left = '50%';
+    dialog.style.transform = 'translateX(-50%)';
+    dialog.style.width = 'min(500px, 92vw)';
+    dialog.style.padding = '12px';
+    
+    const header = document.createElement('div');
+    header.className = 'flow-header';
+    const title = document.createElement('div');
+    title.className = 'flow-title';
+    title.textContent = 'Rename Folder';
+    const actions = document.createElement('div');
+    actions.className = 'toolbar';
+    const btnClose = document.createElement('button');
+    btnClose.className = 'btn';
+    btnClose.textContent = 'Cancel';
+    actions.appendChild(btnClose);
+    header.appendChild(title);
+    header.appendChild(actions);
+    
+    const body = document.createElement('div');
+    body.className = 'steps';
+    
+    const folderField = document.createElement('div');
+    folderField.className = 'field';
+    const folderLabel = document.createElement('div');
+    folderLabel.className = 'label';
+    folderLabel.textContent = 'New Folder Name';
+    const folderInput = document.createElement('input');
+    folderInput.type = 'text';
+    folderInput.value = folderName;
+    folderField.appendChild(folderLabel);
+    folderField.appendChild(folderInput);
+    
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn primary';
+    btnSave.textContent = 'Rename';
+    btnSave.style.marginTop = '16px';
+    
+    body.appendChild(folderField);
+    body.appendChild(btnSave);
+    
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    folderInput.focus();
+    folderInput.select();
+    
+    const close = () => overlay.remove();
+    btnClose.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    
+    btnSave.addEventListener('click', async () => {
+      const newName = folderInput.value.trim();
+      if (!newName) {
+        alert('Folder name is required.');
+        return;
+      }
+      // Build new path
+      const parts = folderPath.split('/');
+      parts[parts.length - 1] = newName;
+      const newPath = parts.join('/');
+      
+      // Rename folder by updating all flows in it
+      await moveFolderToFolder(folderPath, newPath);
+      close();
+    });
+  }
+  
+  async function deleteFolder(folderPath) {
+    const flowsInFolder = Object.entries(foldersMap).filter(([_, path]) => 
+      path === folderPath || path.startsWith(folderPath + '/')
+    );
+    
+    if (flowsInFolder.length === 0) {
+      showToast('Folder is empty');
+      return;
+    }
+    
+    const sure = confirm(`Delete folder "${folderPath}"? This will move ${flowsInFolder.length} flow(s) to root.`);
+    if (!sure) return;
+    
+    // Move all flows to root
+    flowsInFolder.forEach(([flowKey]) => {
+      delete foldersMap[flowKey];
+    });
+    
+    const saved = await saveFoldersMap();
+    if (saved) {
+      await loadFoldersMap();
+      if (currentFolderPath === folderPath || currentFolderPath.startsWith(folderPath + '/')) {
+        currentFolderPath = '';
+      }
+      await renderFlows();
+      showToast(`Folder deleted, ${flowsInFolder.length} flow(s) moved to root`);
+    }
   }
   
   async function openMoveFlowMenu(event, flowKey) {
