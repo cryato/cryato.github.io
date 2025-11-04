@@ -2621,7 +2621,12 @@
         scriptCodesByIdForRestore = scriptCodesById;
       } catch (_) {}
 
-      // 3) Upload new content (store as single-flow object)
+      // 3) Clean up triggers: remove legacy trigger field if triggers array exists
+      if (Array.isArray(def.triggers) && def.triggers.length > 0) {
+        delete def.trigger;
+      }
+      
+      // 4) Upload new content (store as single-flow object)
       const newBody = JSON.stringify(def, null, 2);
       const upMain = await fetch(gcsUploadUrl(bucket, mainPath), {
         method: 'POST',
@@ -2633,7 +2638,7 @@
         throw new Error('Upload failed');
       }
 
-      // 4) Update versions file within flows prefix (flows/versions.txt)
+      // 5) Update versions file within flows prefix (flows/versions.txt)
       try {
         const versionsPath = 'flows/versions.txt';
         // Read existing text if any
