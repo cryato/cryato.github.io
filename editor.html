@@ -1553,6 +1553,19 @@
   }
 
   async function renderSteps() {
+    // Preserve scroll position and active element before clearing
+    const scrollContainer = els.steps.parentElement;
+    const scrollTop = scrollContainer ? scrollContainer.scrollTop : window.pageYOffset;
+    const activeElement = document.activeElement;
+    const activeElementId = activeElement && activeElement.id ? activeElement.id : null;
+    const activeElementValue = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') ? activeElement.value : null;
+    const activeElementType = activeElement && activeElement.tagName === 'INPUT' && activeElement.type === 'text' ? 'input' : activeElement && activeElement.tagName === 'TEXTAREA' ? 'textarea' : activeElement && activeElement.tagName === 'SELECT' ? 'select' : null;
+    const activeElementLabel = activeElement && activeElement.closest('.field') ? (() => {
+      const label = activeElement.closest('.field').querySelector('.label');
+      return label ? label.textContent : null;
+    })() : null;
+    const cursorPosition = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') ? (activeElement.selectionStart || 0) : null;
+    
     els.steps.innerHTML = '';
     const flows = (flowDoc && flowDoc.flows) || {};
     const def = flows[currentFlowKey];
@@ -1995,6 +2008,37 @@
 
       // Insert button after this step (between idx and idx+1)
       els.steps.appendChild(buildInsertBetweenRow(def, idx + 1));
+    });
+    
+    // Restore scroll position
+    requestAnimationFrame(() => {
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollTop;
+      } else {
+        window.scrollTo(0, scrollTop);
+      }
+      
+      // Try to restore focus on the active element if it was an input/textarea/select
+      if (activeElementType && activeElementValue !== null && activeElementLabel) {
+        // Find the element with matching value, type, and label
+        const inputs = els.steps.querySelectorAll(activeElementType === 'input' ? 'input[type="text"]' : activeElementType === 'textarea' ? 'textarea' : 'select');
+        for (const input of inputs) {
+          const field = input.closest('.field');
+          if (field) {
+            const label = field.querySelector('.label');
+            if (label && label.textContent === activeElementLabel && input.value === activeElementValue) {
+              input.focus();
+              // Restore cursor position if possible
+              if (cursorPosition !== null && (activeElementType === 'input' || activeElementType === 'textarea')) {
+                try {
+                  input.setSelectionRange(cursorPosition, cursorPosition);
+                } catch (_) {}
+              }
+              break;
+            }
+          }
+        }
+      }
     });
   }
 
