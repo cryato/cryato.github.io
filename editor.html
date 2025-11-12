@@ -1552,10 +1552,29 @@
     });
   }
 
+  // Update step selection classes without re-rendering
+  function updateStepSelection() {
+    const flows = (flowDoc && flowDoc.flows) || {};
+    const def = flows[currentFlowKey];
+    if (!def || !Array.isArray(def.steps)) return;
+    
+    const stepElements = els.steps.querySelectorAll('.step');
+    stepElements.forEach((stepEl, idx) => {
+      if (idx < def.steps.length) {
+        const step = def.steps[idx];
+        if (selectedSteps.has(step)) {
+          stepEl.classList.add('selected');
+        } else {
+          stepEl.classList.remove('selected');
+        }
+      }
+    });
+  }
+
   async function renderSteps() {
     // Preserve scroll position and active element before clearing
-    const scrollContainer = els.steps.parentElement;
-    const scrollTop = scrollContainer ? scrollContainer.scrollTop : window.pageYOffset;
+    // The actual scroll container is usually window/document, but check parent panels too
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
     const activeElement = document.activeElement;
     const activeElementId = activeElement && activeElement.id ? activeElement.id : null;
     const activeElementValue = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') ? activeElement.value : null;
@@ -1913,6 +1932,7 @@
             selectedSteps.clear();
             selectedSteps.add(step);
             lastSelectedIndex = idx;
+            updateStepSelection();
           }
           openStepContextMenu(e, def);
         } catch (_) {}
@@ -1945,11 +1965,11 @@
           selectedSteps.add(step);
           lastSelectedIndex = idx;
         }
-        renderSteps();
+        updateStepSelection();
       });
       grab.addEventListener('dragstart', (e) => {
         try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'steps'); } catch (_) {}
-        if (!selectedSteps.has(step)) { selectedSteps.clear(); selectedSteps.add(step); lastSelectedIndex = idx; }
+        if (!selectedSteps.has(step)) { selectedSteps.clear(); selectedSteps.add(step); lastSelectedIndex = idx; updateStepSelection(); }
         isDraggingSteps = true;
         document.body.dataset.dragging = '1';
       });
@@ -2012,10 +2032,10 @@
     
     // Restore scroll position
     requestAnimationFrame(() => {
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollTop;
-      } else {
-        window.scrollTo(0, scrollTop);
+      window.scrollTo(0, scrollTop);
+      // Also try documentElement for compatibility
+      if (document.documentElement.scrollTop !== undefined) {
+        document.documentElement.scrollTop = scrollTop;
       }
       
       // Try to restore focus on the active element if it was an input/textarea/select
