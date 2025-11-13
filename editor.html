@@ -408,11 +408,21 @@
         const spec = st.script;
         const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
         const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+        // Preserve existing code if present (e.g., from import)
+        const existingCode = (spec && typeof spec.code === 'string') ? spec.code : '';
         const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
-        if (!objectPath) continue;
+        if (!objectPath) {
+          // No file path available, keep existing code if present
+          if (existingCode) {
+            if (typeof st.script !== 'object' || st.script == null) st.script = {};
+            st.script.code = existingCode;
+          }
+          continue;
+        }
         const code = await fetchScriptCodeFromBucket(objectPath);
         if (typeof st.script !== 'object' || st.script == null) st.script = {};
-        st.script.code = code;
+        // Use fetched code if available, otherwise fall back to existing code
+        st.script.code = code || existingCode;
         if (!st.script.file) st.script.file = fileSpec || scriptFileName(flowKey, stepId);
       }
     } catch (_) {}
@@ -425,9 +435,12 @@
         const spec = st.script;
         const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
         const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
+        // Preserve existing code if present (e.g., from import)
+        const existingCode = (spec && typeof spec.code === 'string') ? spec.code : '';
         const code = await fetchScriptCodeForVersion(flowKey, stepId, fileSpec, versionTs);
         if (typeof st.script !== 'object' || st.script == null) st.script = {};
-        st.script.code = code;
+        // Use fetched code if available, otherwise fall back to existing code
+        st.script.code = code || existingCode;
         if (!st.script.file) st.script.file = fileSpec || scriptFileName(flowKey, stepId);
       }
     } catch (_) {}
@@ -439,7 +452,11 @@
       for (const st of def.steps) {
         if (!st || st.script == null) continue;
         if (typeof st.script === 'object' && st.script.code != null) {
-          try { delete st.script.code; } catch (_) {}
+          // Only strip code if there's a file reference; preserve code from imports without file
+          const hasFile = st.script.file && typeof st.script.file === 'string' && st.script.file.trim().length > 0;
+          if (hasFile) {
+            try { delete st.script.code; } catch (_) {}
+          }
         }
       }
     } catch (_) {}
