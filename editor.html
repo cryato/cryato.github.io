@@ -2095,6 +2095,12 @@
       container.appendChild(fieldText('video_url', askVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
       const askAudioInit = step.audio_url != null ? String(step.audio_url) : '';
       container.appendChild(fieldText('audio_url', askAudioInit, (v) => { if (v) step.audio_url = v; else delete step.audio_url; }, true));
+      const askAnimationInit = step.animation_url != null ? String(step.animation_url) : '';
+      container.appendChild(fieldText('animation_url', askAnimationInit, (v) => { if (v) step.animation_url = v; else delete step.animation_url; }, true));
+      const askDocumentInit = step.document_url != null ? String(step.document_url) : '';
+      container.appendChild(fieldText('document_url', askDocumentInit, (v) => { if (v) step.document_url = v; else delete step.document_url; }, true));
+      const askStickerInit = step.sticker_url != null ? String(step.sticker_url) : '';
+      container.appendChild(fieldText('sticker_url', askStickerInit, (v) => { if (v) step.sticker_url = v; else delete step.sticker_url; }, true));
       const saveInit = step.saveAs != null ? String(step.saveAs) : '';
       container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
       const kbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
@@ -2138,6 +2144,12 @@
       container.appendChild(fieldText('video_url', sayVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
       const sayAudioInit = step.audio_url != null ? String(step.audio_url) : '';
       container.appendChild(fieldText('audio_url', sayAudioInit, (v) => { if (v) step.audio_url = v; else delete step.audio_url; }, true));
+      const sayAnimationInit = step.animation_url != null ? String(step.animation_url) : '';
+      container.appendChild(fieldText('animation_url', sayAnimationInit, (v) => { if (v) step.animation_url = v; else delete step.animation_url; }, true));
+      const sayDocumentInit = step.document_url != null ? String(step.document_url) : '';
+      container.appendChild(fieldText('document_url', sayDocumentInit, (v) => { if (v) step.document_url = v; else delete step.document_url; }, true));
+      const sayStickerInit = step.sticker_url != null ? String(step.sticker_url) : '';
+      container.appendChild(fieldText('sticker_url', sayStickerInit, (v) => { if (v) step.sticker_url = v; else delete step.sticker_url; }, true));
       const sayKbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
       const sayKbField = fieldText('keyboard', sayKbInit, (v) => {
         const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
@@ -2241,6 +2253,7 @@
       ta.addEventListener('input', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
       ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
       wrap.appendChild(label); wrap.appendChild(ta); container.appendChild(wrap);
+      
       // Optional target user_id (nested in set_attributes)
       const uidInit = step.set_attributes && step.set_attributes.user_id != null ? String(step.set_attributes.user_id) : '';
       container.appendChild(fieldText('user_id (optional)', uidInit, (v) => {
@@ -2248,6 +2261,46 @@
         if (v) obj.user_id = v; else delete obj.user_id;
         step.set_attributes = obj;
       }, true));
+      
+      // Overwrite flag with warning
+      const overwriteWrap = document.createElement('div'); overwriteWrap.className = 'field';
+      const overwriteLabel = document.createElement('label');
+      overwriteLabel.style.display = 'flex';
+      overwriteLabel.style.alignItems = 'center';
+      overwriteLabel.style.cursor = 'pointer';
+      const overwriteCheckbox = document.createElement('input');
+      overwriteCheckbox.type = 'checkbox';
+      overwriteCheckbox.checked = step.overwrite === true;
+      overwriteCheckbox.style.marginRight = '8px';
+      overwriteCheckbox.addEventListener('change', () => {
+        if (overwriteCheckbox.checked) {
+          step.overwrite = true;
+          warningDiv.style.display = 'block';
+        } else {
+          delete step.overwrite;
+          warningDiv.style.display = 'none';
+        }
+      });
+      const overwriteText = document.createElement('span');
+      overwriteText.textContent = 'Overwrite all attributes';
+      overwriteLabel.appendChild(overwriteCheckbox);
+      overwriteLabel.appendChild(overwriteText);
+      overwriteWrap.appendChild(overwriteLabel);
+      
+      // Warning message
+      const warningDiv = document.createElement('div');
+      warningDiv.style.marginTop = '8px';
+      warningDiv.style.padding = '12px';
+      warningDiv.style.backgroundColor = '#fff3cd';
+      warningDiv.style.border = '1px solid #ffc107';
+      warningDiv.style.borderRadius = '4px';
+      warningDiv.style.color = '#856404';
+      warningDiv.style.fontSize = '14px';
+      warningDiv.style.display = step.overwrite === true ? 'block' : 'none';
+      warningDiv.innerHTML = '<strong>⚠️ Warning:</strong> This will replace ALL user attributes with only the ones specified above. All other attributes will be permanently deleted.';
+      overwriteWrap.appendChild(warningDiv);
+      
+      container.appendChild(overwriteWrap);
       return;
     }
 

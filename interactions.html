@@ -511,6 +511,21 @@
         const lAudio = document.createElement('div'); lAudio.className = 'label'; lAudio.textContent = 'audio_url';
         const iAudio = document.createElement('input'); iAudio.type = 'text'; iAudio.value = String(step.audio_url || ''); iAudio.disabled = !editable; if (editable) iAudio.addEventListener('input', (e) => { const v = e.target.value; if (v) step.audio_url = v; else delete step.audio_url; });
         fAudio.appendChild(lAudio); fAudio.appendChild(iAudio); container.appendChild(fAudio);
+        // animation_url
+        const fAnimation = document.createElement('div'); fAnimation.className = 'field';
+        const lAnimation = document.createElement('div'); lAnimation.className = 'label'; lAnimation.textContent = 'animation_url';
+        const iAnimation = document.createElement('input'); iAnimation.type = 'text'; iAnimation.value = String(step.animation_url || ''); iAnimation.disabled = !editable; if (editable) iAnimation.addEventListener('input', (e) => { const v = e.target.value; if (v) step.animation_url = v; else delete step.animation_url; });
+        fAnimation.appendChild(lAnimation); fAnimation.appendChild(iAnimation); container.appendChild(fAnimation);
+        // document_url
+        const fDocument = document.createElement('div'); fDocument.className = 'field';
+        const lDocument = document.createElement('div'); lDocument.className = 'label'; lDocument.textContent = 'document_url';
+        const iDocument = document.createElement('input'); iDocument.type = 'text'; iDocument.value = String(step.document_url || ''); iDocument.disabled = !editable; if (editable) iDocument.addEventListener('input', (e) => { const v = e.target.value; if (v) step.document_url = v; else delete step.document_url; });
+        fDocument.appendChild(lDocument); fDocument.appendChild(iDocument); container.appendChild(fDocument);
+        // sticker_url
+        const fSticker = document.createElement('div'); fSticker.className = 'field';
+        const lSticker = document.createElement('div'); lSticker.className = 'label'; lSticker.textContent = 'sticker_url';
+        const iSticker = document.createElement('input'); iSticker.type = 'text'; iSticker.value = String(step.sticker_url || ''); iSticker.disabled = !editable; if (editable) iSticker.addEventListener('input', (e) => { const v = e.target.value; if (v) step.sticker_url = v; else delete step.sticker_url; });
+        fSticker.appendChild(lSticker); fSticker.appendChild(iSticker); container.appendChild(fSticker);
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
         const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.saveAs = v; else delete step.saveAs; });
@@ -556,6 +571,26 @@
         const lVideo2 = document.createElement('div'); lVideo2.className = 'label'; lVideo2.textContent = 'video_url';
         const iVideo2 = document.createElement('input'); iVideo2.type = 'text'; iVideo2.value = String(step.video_url || ''); iVideo2.disabled = !editable; if (editable) iVideo2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.video_url = v; else delete step.video_url; });
         fVideo2.appendChild(lVideo2); fVideo2.appendChild(iVideo2); container.appendChild(fVideo2);
+        // audio_url
+        const fAudio2 = document.createElement('div'); fAudio2.className = 'field';
+        const lAudio2 = document.createElement('div'); lAudio2.className = 'label'; lAudio2.textContent = 'audio_url';
+        const iAudio2 = document.createElement('input'); iAudio2.type = 'text'; iAudio2.value = String(step.audio_url || ''); iAudio2.disabled = !editable; if (editable) iAudio2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.audio_url = v; else delete step.audio_url; });
+        fAudio2.appendChild(lAudio2); fAudio2.appendChild(iAudio2); container.appendChild(fAudio2);
+        // animation_url
+        const fAnimation2 = document.createElement('div'); fAnimation2.className = 'field';
+        const lAnimation2 = document.createElement('div'); lAnimation2.className = 'label'; lAnimation2.textContent = 'animation_url';
+        const iAnimation2 = document.createElement('input'); iAnimation2.type = 'text'; iAnimation2.value = String(step.animation_url || ''); iAnimation2.disabled = !editable; if (editable) iAnimation2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.animation_url = v; else delete step.animation_url; });
+        fAnimation2.appendChild(lAnimation2); fAnimation2.appendChild(iAnimation2); container.appendChild(fAnimation2);
+        // document_url
+        const fDocument2 = document.createElement('div'); fDocument2.className = 'field';
+        const lDocument2 = document.createElement('div'); lDocument2.className = 'label'; lDocument2.textContent = 'document_url';
+        const iDocument2 = document.createElement('input'); iDocument2.type = 'text'; iDocument2.value = String(step.document_url || ''); iDocument2.disabled = !editable; if (editable) iDocument2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.document_url = v; else delete step.document_url; });
+        fDocument2.appendChild(lDocument2); fDocument2.appendChild(iDocument2); container.appendChild(fDocument2);
+        // sticker_url
+        const fSticker2 = document.createElement('div'); fSticker2.className = 'field';
+        const lSticker2 = document.createElement('div'); lSticker2.className = 'label'; lSticker2.textContent = 'sticker_url';
+        const iSticker2 = document.createElement('input'); iSticker2.type = 'text'; iSticker2.value = String(step.sticker_url || ''); iSticker2.disabled = !editable; if (editable) iSticker2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.sticker_url = v; else delete step.sticker_url; });
+        fSticker2.appendChild(lSticker2); fSticker2.appendChild(iSticker2); container.appendChild(fSticker2);
         // keyboard
         const fKb = document.createElement('div'); fKb.className = 'field';
         const lKb = document.createElement('div'); lKb.className = 'label'; lKb.textContent = 'keyboard';
@@ -643,11 +678,45 @@
           ta.addEventListener('blur', () => { const obj = safeParseJson(ta.value); if (obj && typeof obj === 'object') step.set_attributes = obj; });
         }
         field.appendChild(label); field.appendChild(ta); container.appendChild(field);
+        
         // Optional user_id nested in set_attributes
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'user_id (optional)';
         const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String((step.set_attributes && step.set_attributes.user_id) || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; const obj = step.set_attributes || {}; if (v) obj.user_id = v; else delete obj.user_id; step.set_attributes = obj; });
         f2.appendChild(l2); f2.appendChild(i2); container.appendChild(f2);
+        
+        // Overwrite flag
+        const overwriteField = document.createElement('div'); overwriteField.className = 'field';
+        const overwriteLabel = document.createElement('div'); overwriteLabel.className = 'label'; overwriteLabel.textContent = 'overwrite all attributes';
+        const overwriteCheckbox = document.createElement('input'); 
+        overwriteCheckbox.type = 'checkbox'; 
+        overwriteCheckbox.checked = step.overwrite === true;
+        overwriteCheckbox.disabled = !editable;
+        if (editable) {
+          overwriteCheckbox.addEventListener('change', () => {
+            if (overwriteCheckbox.checked) {
+              step.overwrite = true;
+            } else {
+              delete step.overwrite;
+            }
+          });
+        }
+        overwriteField.appendChild(overwriteLabel); overwriteField.appendChild(overwriteCheckbox); container.appendChild(overwriteField);
+        
+        // Show warning if overwrite is enabled
+        if (step.overwrite === true) {
+          const warningDiv = document.createElement('div');
+          warningDiv.style.marginTop = '8px';
+          warningDiv.style.padding = '12px';
+          warningDiv.style.backgroundColor = '#fff3cd';
+          warningDiv.style.border = '1px solid #ffc107';
+          warningDiv.style.borderRadius = '4px';
+          warningDiv.style.color = '#856404';
+          warningDiv.style.fontSize = '14px';
+          warningDiv.innerHTML = '<strong>⚠️ Warning:</strong> This will replace ALL user attributes.';
+          container.appendChild(warningDiv);
+        }
+        
         return;
       }
 
