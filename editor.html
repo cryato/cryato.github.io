@@ -2270,13 +2270,18 @@
       methodSel.style.background = 'rgba(17,24,39,0.6)'; methodSel.style.border = '1px solid #1f2937'; methodSel.style.color = '#e5e7eb'; methodSel.style.borderRadius = '8px'; methodSel.style.padding = '4px 6px';
       methodSel.addEventListener('change', () => { req.method = methodSel.value; });
       methodWrap.appendChild(methodLabel); methodWrap.appendChild(methodSel);
+      const headersWrap = document.createElement('div'); headersWrap.className = 'field';
+      const headersLabel = document.createElement('div'); headersLabel.className = 'label'; headersLabel.textContent = 'headers JSON';
+      const headersTa = document.createElement('textarea'); headersTa.value = req.headers ? JSON.stringify(req.headers, null, 2) : '';
+      headersTa.addEventListener('blur', () => { const obj = safeParseJson(headersTa.value); if (obj != null) req.headers = obj; else delete req.headers; });
+      headersWrap.appendChild(headersLabel); headersWrap.appendChild(headersTa);
       const bodyWrap = document.createElement('div'); bodyWrap.className = 'field';
       const bodyLabel = document.createElement('div'); bodyLabel.className = 'label'; bodyLabel.textContent = 'body JSON';
       const bodyTa = document.createElement('textarea'); bodyTa.value = req.body ? JSON.stringify(req.body, null, 2) : '';
       bodyTa.addEventListener('blur', () => { const obj = safeParseJson(bodyTa.value); if (obj != null) req.body = obj; else delete req.body; });
       bodyWrap.appendChild(bodyLabel); bodyWrap.appendChild(bodyTa);
       const saveField = fieldText('saveAs', req.saveAs || '', (v) => { if (v) req.saveAs = v; else delete req.saveAs; }, true);
-      container.appendChild(urlField); container.appendChild(methodWrap); container.appendChild(bodyWrap); container.appendChild(saveField);
+      container.appendChild(urlField); container.appendChild(methodWrap); container.appendChild(headersWrap); container.appendChild(bodyWrap); container.appendChild(saveField);
       step.web_request = req;
       return;
     }
@@ -3022,10 +3027,12 @@
       } else if (t === 'web_request') {
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'https://api.example.com';
         const method = document.createElement('select'); ['GET','POST','PUT','PATCH','DELETE'].forEach((m) => { const o = document.createElement('option'); o.value = m; o.textContent = m; method.appendChild(o); });
+        const headers = document.createElement('textarea'); headers.placeholder = '{ "Authorization": "Bearer {{token}}" } (optional)';
         const body = document.createElement('textarea'); body.placeholder = '{ "foo": "bar" } (optional)';
         const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'saveAs (optional)';
         formWrap.appendChild(field('url', url));
         formWrap.appendChild(field('method', method));
+        formWrap.appendChild(field('headers JSON', headers));
         formWrap.appendChild(field('body JSON', body));
         formWrap.appendChild(field('saveAs', save));
       } else if (t === 'sheets_add_row') {
@@ -3176,9 +3183,11 @@
         if (uid && uid.value) step.get_attributes.user_id = String(uid.value);
       } else if (t === 'web_request') {
         const inputs = formWrap.querySelectorAll('input'); const url = inputs[0]; const save = inputs[1];
-        const method = formWrap.querySelector('select'); const body = formWrap.querySelector('textarea');
+        const method = formWrap.querySelector('select'); 
+        const textareas = formWrap.querySelectorAll('textarea'); const headers = textareas[0]; const body = textareas[1];
         const req = { url: String((url && url.value) || '') };
         req.method = method && method.value ? method.value : 'GET';
+        const headersObj = parseJsonSafe(headers && headers.value || ''); if (headersObj) req.headers = headersObj;
         const bodyObj = parseJsonSafe(body && body.value || ''); if (bodyObj) req.body = bodyObj;
         if (save && save.value) req.saveAs = String(save.value);
         step.web_request = req;
