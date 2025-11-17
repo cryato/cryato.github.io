@@ -506,6 +506,11 @@
         const lVideo = document.createElement('div'); lVideo.className = 'label'; lVideo.textContent = 'video_url';
         const iVideo = document.createElement('input'); iVideo.type = 'text'; iVideo.value = String(step.video_url || ''); iVideo.disabled = !editable; if (editable) iVideo.addEventListener('input', (e) => { const v = e.target.value; if (v) step.video_url = v; else delete step.video_url; });
         fVideo.appendChild(lVideo); fVideo.appendChild(iVideo); container.appendChild(fVideo);
+        // audio_url
+        const fAudio = document.createElement('div'); fAudio.className = 'field';
+        const lAudio = document.createElement('div'); lAudio.className = 'label'; lAudio.textContent = 'audio_url';
+        const iAudio = document.createElement('input'); iAudio.type = 'text'; iAudio.value = String(step.audio_url || ''); iAudio.disabled = !editable; if (editable) iAudio.addEventListener('input', (e) => { const v = e.target.value; if (v) step.audio_url = v; else delete step.audio_url; });
+        fAudio.appendChild(lAudio); fAudio.appendChild(iAudio); container.appendChild(fAudio);
         const f2 = document.createElement('div'); f2.className = 'field';
         const l2 = document.createElement('div'); l2.className = 'label'; l2.textContent = 'saveAs';
         const i2 = document.createElement('input'); i2.type = 'text'; i2.value = String(step.saveAs || ''); i2.disabled = !editable; if (editable) i2.addEventListener('input', (e) => { const v = e.target.value; if (v) step.saveAs = v; else delete step.saveAs; });

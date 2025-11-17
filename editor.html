@@ -2093,6 +2093,8 @@
       container.appendChild(fieldText('photo_url', askPhotoInit, (v) => { if (v) step.photo_url = v; else delete step.photo_url; }, true));
       const askVideoInit = step.video_url != null ? String(step.video_url) : '';
       container.appendChild(fieldText('video_url', askVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
+      const askAudioInit = step.audio_url != null ? String(step.audio_url) : '';
+      container.appendChild(fieldText('audio_url', askAudioInit, (v) => { if (v) step.audio_url = v; else delete step.audio_url; }, true));
       const saveInit = step.saveAs != null ? String(step.saveAs) : '';
       container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
       const kbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
@@ -2134,6 +2136,8 @@
       container.appendChild(fieldText('photo_url', sayPhotoInit, (v) => { if (v) step.photo_url = v; else delete step.photo_url; }, true));
       const sayVideoInit = step.video_url != null ? String(step.video_url) : '';
       container.appendChild(fieldText('video_url', sayVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
+      const sayAudioInit = step.audio_url != null ? String(step.audio_url) : '';
+      container.appendChild(fieldText('audio_url', sayAudioInit, (v) => { if (v) step.audio_url = v; else delete step.audio_url; }, true));
       const sayKbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
       const sayKbField = fieldText('keyboard', sayKbInit, (v) => {
         const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
