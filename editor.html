@@ -2103,10 +2103,23 @@
       container.appendChild(fieldText('sticker_url', askStickerInit, (v) => { if (v) step.sticker_url = v; else delete step.sticker_url; }, true));
       const saveInit = step.saveAs != null ? String(step.saveAs) : '';
       container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
-      const kbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
+      // Format keyboard for display: nested arrays show as "Button1|Button2" per row
+      const kbInit = Array.isArray(step.keyboard) 
+        ? step.keyboard.map(item => Array.isArray(item) ? item.join('|') : item).join('\n') 
+        : '';
       const kbField = fieldText('keyboard', kbInit, (v) => {
         const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
-        if (lines.length > 0) step.keyboard = lines; else delete step.keyboard;
+        if (lines.length > 0) {
+          // Parse lines: if line contains |, create nested array for that row
+          step.keyboard = lines.map(line => {
+            if (line.includes('|')) {
+              return line.split('|').map(b => b.trim()).filter(Boolean);
+            }
+            return line;
+          });
+        } else {
+          delete step.keyboard;
+        }
       });
       container.appendChild(kbField);
       // verification
@@ -2150,10 +2163,23 @@
       container.appendChild(fieldText('document_url', sayDocumentInit, (v) => { if (v) step.document_url = v; else delete step.document_url; }, true));
       const sayStickerInit = step.sticker_url != null ? String(step.sticker_url) : '';
       container.appendChild(fieldText('sticker_url', sayStickerInit, (v) => { if (v) step.sticker_url = v; else delete step.sticker_url; }, true));
-      const sayKbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
+      // Format keyboard for display: nested arrays show as "Button1|Button2" per row
+      const sayKbInit = Array.isArray(step.keyboard) 
+        ? step.keyboard.map(item => Array.isArray(item) ? item.join('|') : item).join('\n') 
+        : '';
       const sayKbField = fieldText('keyboard', sayKbInit, (v) => {
         const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
-        if (lines.length > 0) step.keyboard = lines; else delete step.keyboard;
+        if (lines.length > 0) {
+          // Parse lines: if line contains |, create nested array for that row
+          step.keyboard = lines.map(line => {
+            if (line.includes('|')) {
+              return line.split('|').map(b => b.trim()).filter(Boolean);
+            }
+            return line;
+          });
+        } else {
+          delete step.keyboard;
+        }
       });
       container.appendChild(sayKbField);
       const uidInit = step.user_id != null ? String(step.user_id) : '';
