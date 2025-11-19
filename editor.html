@@ -408,8 +408,16 @@
         const spec = st.script;
         const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
         const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
-        // Preserve existing code if present (e.g., from import)
+        // Preserve existing code if present (e.g., from import or inline storage)
         const existingCode = (spec && typeof spec.code === 'string') ? spec.code : '';
+        
+        // If code is already present inline (< 20 lines), don't fetch from file
+        if (existingCode && existingCode.trim().length > 0 && !fileSpec) {
+          if (typeof st.script !== 'object' || st.script == null) st.script = {};
+          st.script.code = existingCode;
+          continue; // Skip file fetch for inline scripts
+        }
+        
         const objectPath = fileSpec ? toScriptObjectPathFromSpec(fileSpec) : (stepId ? scriptObjectPath(flowKey, stepId) : '');
         if (!objectPath) {
           // No file path available, keep existing code if present
@@ -435,8 +443,16 @@
         const spec = st.script;
         const fileSpec = (spec && typeof spec === 'object' && spec.file) ? spec.file : '';
         const stepId = (st && typeof st.step_id === 'string' && st.step_id) ? st.step_id : '';
-        // Preserve existing code if present (e.g., from import)
+        // Preserve existing code if present (e.g., from import or inline storage)
         const existingCode = (spec && typeof spec.code === 'string') ? spec.code : '';
+        
+        // If code is already present inline (< 20 lines), don't fetch from file
+        if (existingCode && existingCode.trim().length > 0 && !fileSpec) {
+          if (typeof st.script !== 'object' || st.script == null) st.script = {};
+          st.script.code = existingCode;
+          continue; // Skip file fetch for inline scripts
+        }
+        
         const code = await fetchScriptCodeForVersion(flowKey, stepId, fileSpec, versionTs);
         if (typeof st.script !== 'object' || st.script == null) st.script = {};
         // Use fetched code if available, otherwise fall back to existing code
@@ -452,11 +468,17 @@
       for (const st of def.steps) {
         if (!st || st.script == null) continue;
         if (typeof st.script === 'object' && st.script.code != null) {
-          // Only strip code if there's a file reference; preserve code from imports without file
+          // Only strip code if there's a file reference; preserve inline code (< 20 lines, no file ref)
           const hasFile = st.script.file && typeof st.script.file === 'string' && st.script.file.trim().length > 0;
-          if (hasFile) {
+          const code = st.script.code || '';
+          const lineCount = code ? code.split(/\r?\n/).length : 0;
+          const isInline = lineCount < 20 && !hasFile;
+          
+          if (hasFile && !isInline) {
+            // File-based script: strip code for export (code will be fetched from file)
             try { delete st.script.code; } catch (_) {}
           }
+          // Inline scripts (< 20 lines, no file): keep code in JSON
         }
       }
     } catch (_) {}
@@ -2373,20 +2395,61 @@
     if (step.script != null) {
       const spec = step.script || {};
       const sid = (step && typeof step.step_id === 'string' && step.step_id) ? step.step_id : '';
-      // File path (required for save)
-      const fileWrap = document.createElement('div'); fileWrap.className = 'field';
-      const fileLabel = document.createElement('div'); fileLabel.className = 'label'; fileLabel.textContent = 'file (path)';
-      const fileInput = document.createElement('input'); fileInput.type = 'text'; fileInput.placeholder = sid ? scriptFileName(currentFlowKey || 'flow', sid) : 'script_file.js';
-      fileInput.value = typeof spec.file === 'string' && spec.file ? spec.file : (sid ? scriptFileName(currentFlowKey || 'flow', sid) : (spec.file || ''));
-      fileInput.addEventListener('input', () => { const v = String(fileInput.value || '').trim(); if (!spec || typeof spec !== 'object') step.script = {}; if (v) step.script.file = v; else delete step.script.file; });
-      fileWrap.appendChild(fileLabel); fileWrap.appendChild(fileInput); container.appendChild(fileWrap);
-
+      
       // Code editor (editor-only; not persisted in JSON)
       const codeWrap = document.createElement('div'); codeWrap.className = 'field';
       const codeLabel = document.createElement('div'); codeLabel.className = 'label'; codeLabel.textContent = 'code (JS)';
       const ta = document.createElement('textarea'); ta.value = String(spec.code || ''); ta.placeholder = 'Paste JS code. Use resolve({ ... }) to return variables.';
-      ta.addEventListener('input', () => { if (!step.script || typeof step.script !== 'object') step.script = {}; step.script.code = ta.value; });
+      ta.addEventListener('input', () => { 
+        if (!step.script || typeof step.script !== 'object') step.script = {}; 
+        step.script.code = ta.value; 
+        // Update storage mode indicator
+        updateStorageModeIndicator();
+      });
       codeWrap.appendChild(codeLabel); codeWrap.appendChild(ta); container.appendChild(codeWrap);
+      
+      // Storage mode indicator
+      const modeWrap = document.createElement('div'); modeWrap.className = 'field';
+      const modeLabel = document.createElement('div'); modeLabel.className = 'label'; modeLabel.textContent = 'storage mode';
+      const modeIndicator = document.createElement('div'); 
+      modeIndicator.style.padding = '8px';
+      modeIndicator.style.borderRadius = '4px';
+      modeIndicator.style.fontSize = '0.9em';
+      function updateStorageModeIndicator() {
+        const code = ta.value || '';
+        const lineCount = code ? code.split(/\r?\n/).length : 0;
+        if (lineCount < 20 && code.trim().length > 0) {
+          modeIndicator.textContent = `✓ Inline (${lineCount} lines) - will be stored in flow JSON`;
+          modeIndicator.style.backgroundColor = '#e8f5e9';
+          modeIndicator.style.color = '#2e7d32';
+          fileInput.disabled = true;
+          fileInput.style.opacity = '0.5';
+        } else if (code.trim().length > 0) {
+          modeIndicator.textContent = `File-based (${lineCount} lines) - will be uploaded to scripts/`;
+          modeIndicator.style.backgroundColor = '#e3f2fd';
+          modeIndicator.style.color = '#1565c0';
+          fileInput.disabled = false;
+          fileInput.style.opacity = '1';
+        } else {
+          modeIndicator.textContent = 'No code yet';
+          modeIndicator.style.backgroundColor = '#f5f5f5';
+          modeIndicator.style.color = '#757575';
+          fileInput.disabled = false;
+          fileInput.style.opacity = '1';
+        }
+      }
+      modeWrap.appendChild(modeLabel); modeWrap.appendChild(modeIndicator); container.appendChild(modeWrap);
+      
+      // File path (required for file-based scripts)
+      const fileWrap = document.createElement('div'); fileWrap.className = 'field';
+      const fileLabel = document.createElement('div'); fileLabel.className = 'label'; fileLabel.textContent = 'file (path - for file-based only)';
+      const fileInput = document.createElement('input'); fileInput.type = 'text'; fileInput.placeholder = sid ? scriptFileName(currentFlowKey || 'flow', sid) : 'script_file.js';
+      fileInput.value = typeof spec.file === 'string' && spec.file ? spec.file : (sid ? scriptFileName(currentFlowKey || 'flow', sid) : (spec.file || ''));
+      fileInput.addEventListener('input', () => { const v = String(fileInput.value || '').trim(); if (!spec || typeof spec !== 'object') step.script = {}; if (v) step.script.file = v; else delete step.script.file; });
+      fileWrap.appendChild(fileLabel); fileWrap.appendChild(fileInput); container.appendChild(fileWrap);
+      
+      // Initialize storage mode indicator
+      updateStorageModeIndicator();
 
       // Timeout
       const wrap = document.createElement('div'); wrap.className = 'field';
@@ -3608,7 +3671,7 @@
       const newTimestampUtc = formatUtcNowForFlow();
       try { def.updated_at = newTimestampUtc; } catch (_) {}
 
-      // 2) For each script step: upload code to scripts/, create backup of previous if code changed, and set file reference; do not store inline code in JSON
+      // 2) For each script step: if code is under 20 lines, store inline; otherwise upload to scripts/ and use file reference
       let stepsForRestore = null;
       let scriptCodesByIdForRestore = null;
       try {
@@ -3620,36 +3683,47 @@
           if (!sid) continue;
           const spec = st.script || {};
           const code = typeof spec.code === 'string' ? spec.code : '';
-          const fileName = typeof spec.file === 'string' && spec.file ? spec.file : scriptFileName(currentFlowKey, sid);
-          const objectPath = toScriptObjectPathFromSpec(fileName);
-          let existingText = null;
-          try {
-            const getRes = await fetch(gcsDownloadUrl(bucket, objectPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-            if (getRes.ok) existingText = await getRes.text();
-          } catch (_) {}
-          if (code && existingText != null && existingText !== code) {
-            // Backup previous to scripts/backups with current flow version timestamp
-            const backupPath = scriptBackupObjectPath(currentFlowKey, sid, newTimestampUtc);
-            try {
-              const resBU = await fetch(gcsUploadUrl(bucket, backupPath), {
-                method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: existingText
-              });
-              if (!resBU.ok && (resBU.status === 401 || resBU.status === 403)) throw new Error('401');
-            } catch (_) {}
-          }
-          // Upload new code only if provided in the editor
-          if (code) {
-            try {
-              const resSC = await fetch(gcsUploadUrl(bucket, objectPath), {
-                method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: code
-              });
-              if (!resSC.ok && (resSC.status === 401 || resSC.status === 403)) throw new Error('401');
-            } catch (_) {}
+          const lineCount = code ? code.split(/\r?\n/).length : 0;
+          
+          // If code is under 20 lines, store it inline in JSON
+          if (code && lineCount < 20) {
+            st.script = Object.assign({}, spec, { code: code });
+            // Remove file reference for inline code
+            try { delete st.script.file; } catch (_) {}
             scriptCodesById.set(sid, code);
+          } else {
+            // For 20+ lines, upload to scripts/ as before
+            const fileName = typeof spec.file === 'string' && spec.file ? spec.file : scriptFileName(currentFlowKey, sid);
+            const objectPath = toScriptObjectPathFromSpec(fileName);
+            let existingText = null;
+            try {
+              const getRes = await fetch(gcsDownloadUrl(bucket, objectPath), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+              if (getRes.ok) existingText = await getRes.text();
+            } catch (_) {}
+            if (code && existingText != null && existingText !== code) {
+              // Backup previous to scripts/backups with current flow version timestamp
+              const backupPath = scriptBackupObjectPath(currentFlowKey, sid, newTimestampUtc);
+              try {
+                const resBU = await fetch(gcsUploadUrl(bucket, backupPath), {
+                  method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: existingText
+                });
+                if (!resBU.ok && (resBU.status === 401 || resBU.status === 403)) throw new Error('401');
+              } catch (_) {}
+            }
+            // Upload new code only if provided in the editor
+            if (code) {
+              try {
+                const resSC = await fetch(gcsUploadUrl(bucket, objectPath), {
+                  method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/javascript; charset=utf-8' }, body: code
+                });
+                if (!resSC.ok && (resSC.status === 401 || resSC.status === 403)) throw new Error('401');
+              } catch (_) {}
+              scriptCodesById.set(sid, code);
+            }
+            // Replace inline code with file reference for stored flow
+            st.script = Object.assign({}, spec, { file: fileName });
+            try { delete st.script.code; } catch (_) {}
           }
-          // Replace inline code with file reference for stored flow
-          st.script = Object.assign({}, spec, { file: fileName });
-          try { delete st.script.code; } catch (_) {}
         }
         // Defer restoring code until after we upload sanitized JSON
         stepsForRestore = steps;
