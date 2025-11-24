@@ -2266,12 +2266,23 @@
     // LABEL
     if (step.label != null) {
       container.appendChild(fieldText('label', step.label, (v) => { step.label = v; }, true));
+      const saveAsInit = step.saveAs != null ? String(step.saveAs) : '';
+      container.appendChild(fieldText('saveAs (optional, for label metadata)', saveAsInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
       return;
     }
 
     // GOTO
     if (step.goto != null) {
       container.appendChild(fieldText('goto', step.goto, (v) => { step.goto = v; }, true));
+      // Optional variables JSON for label metadata
+      const varsWrap = document.createElement('div'); varsWrap.className = 'field';
+      const varsLabel = document.createElement('div'); varsLabel.className = 'label'; varsLabel.textContent = 'variables (JSON, optional)';
+      const varsTa = document.createElement('textarea'); varsTa.value = (step && typeof step.variables === 'object') ? JSON.stringify(step.variables, null, 2) : '';
+      varsTa.addEventListener('input', () => {
+        const obj = safeParseJson(varsTa.value);
+        if (obj && typeof obj === 'object') step.variables = obj; else if (!varsTa.value.trim()) delete step.variables;
+      });
+      varsWrap.appendChild(varsLabel); varsWrap.appendChild(varsTa); container.appendChild(varsWrap);
       return;
     }
 
@@ -3300,9 +3311,21 @@
         if (recur && recur.checked) cfg.recurring = true;
         step.schedule = cfg;
       } else if (t === 'label') {
-        const i = formWrap.querySelector('input[type="text"]'); step.label = String((i && i.value) || 'label');
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const labelInput = inputs && inputs[0];
+        const saveAsInput = inputs && inputs[1];
+        step.label = String((labelInput && labelInput.value) || 'label');
+        if (saveAsInput && saveAsInput.value) step.saveAs = String(saveAsInput.value); else delete step.saveAs;
       } else if (t === 'goto') {
-        const i = formWrap.querySelector('input[type="text"]'); step.goto = String((i && i.value) || 'label');
+        const i = formWrap.querySelector('input[type="text"]'); 
+        const varsTa = formWrap.querySelector('textarea');
+        step.goto = String((i && i.value) || 'label');
+        if (varsTa && varsTa.value && varsTa.value.trim()) {
+          const obj = parseJsonSafe(varsTa.value);
+          if (obj && typeof obj === 'object') step.variables = obj;
+        } else {
+          delete step.variables;
+        }
       } else if (t === 'trigger') {
         const inputs = formWrap.querySelectorAll('input[type="text"]');
         const trg = inputs && inputs[0];
