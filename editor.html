@@ -1809,10 +1809,10 @@
         
         const typeSel = document.createElement('select');
         typeSel.style.flex = '0 0 120px';
-        ['trigger', 'catch_all'].forEach(t => {
+        ['trigger', 'catch_all', 'broadcast'].forEach(t => {
           const opt = document.createElement('option');
           opt.value = t;
-          opt.textContent = t === 'trigger' ? 'Trigger' : 'Catch-all';
+          opt.textContent = t === 'trigger' ? 'Trigger' : (t === 'catch_all' ? 'Catch-all' : 'Broadcast');
           if (trigger.type === t || (t === 'trigger' && (trigger.type === 'command' || trigger.type === 'keyword' || trigger.type === 'phrase'))) opt.selected = true;
           typeSel.appendChild(opt);
         });
@@ -1824,6 +1824,9 @@
         if (trigger.type === 'catch_all') {
           valueInput.style.display = 'none';
           valueInput.value = 'catch-all';
+        } else if (trigger.type === 'broadcast') {
+          valueInput.style.display = 'none';
+          valueInput.value = 'broadcast';
         } else {
           valueInput.style.display = '';
           // Dynamic placeholder based on current value
@@ -1867,6 +1870,9 @@
           if (trigger.type === 'catch_all') {
             valueInput.style.display = 'none';
             valueInput.value = 'catch-all';
+          } else if (trigger.type === 'broadcast') {
+            valueInput.style.display = 'none';
+            valueInput.value = 'broadcast';
           } else {
             valueInput.style.display = '';
             const val = valueInput.value.trim();
@@ -1876,7 +1882,7 @@
         });
         
         valueInput.addEventListener('input', () => {
-          if (trigger.type !== 'catch_all') {
+          if (trigger.type !== 'catch_all' && trigger.type !== 'broadcast') {
             trigger.value = valueInput.value.trim();
             saveTriggers();
           }
