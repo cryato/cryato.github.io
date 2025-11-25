@@ -3513,7 +3513,7 @@
 
     const keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.placeholder = 'flow key (e.g., orders)';
     const typeSel = document.createElement('select');
-    ;[['chat','Chat (triggered by command or keyword)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)'], ['catch_all','Catch-all (triggered when no other flow matches)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
+    ;[['chat','Chat (triggered by command or keyword)'], ['webhook','Webhook (headless)'], ['error_handler','Error handler (called on errors)'], ['catch_all','Catch-all (triggered when no other flow matches)'], ['broadcast','Broadcast (admin-triggered to multiple users)']].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; typeSel.appendChild(o); });
     const triggerInput = document.createElement('input'); triggerInput.type = 'text'; triggerInput.placeholder = '/orders or help me (for chat) or orders (for webhook)';
     const descInput = document.createElement('input'); descInput.type = 'text'; descInput.placeholder = 'optional description';
 
@@ -3525,6 +3525,10 @@
         triggerInput.placeholder = '(not used)';
         triggerInput.style.display = '';
       } else if (typeSel.value === 'catch_all') {
+        triggerInput.placeholder = '(not used)';
+        triggerInput.style.display = 'none';
+        triggerInput.value = '';
+      } else if (typeSel.value === 'broadcast') {
         triggerInput.placeholder = '(not used)';
         triggerInput.style.display = 'none';
         triggerInput.value = '';
@@ -3552,7 +3556,7 @@
     btnCreate.addEventListener('click', async () => {
       try {
         const key = String(keyInput.value || '').trim();
-        const type = typeSel.value === 'webhook' ? 'webhook' : (typeSel.value === 'error_handler' ? 'error_handler' : (typeSel.value === 'catch_all' ? 'catch_all' : 'chat'));
+        const type = typeSel.value === 'webhook' ? 'webhook' : (typeSel.value === 'error_handler' ? 'error_handler' : (typeSel.value === 'catch_all' ? 'catch_all' : (typeSel.value === 'broadcast' ? 'broadcast' : 'chat')));
         const trigger = String(triggerInput.value || '').trim();
         const description = String(descInput.value || '').trim();
         if (!key) { alert('Enter a flow key'); return; }
@@ -3572,6 +3576,11 @@
           def.type = 'catch_all';
           def.triggers = [{ type: 'catch_all', value: 'catch-all' }];
           def.description = def.description || 'Triggers when no other flow matches';
+        } else if (type === 'broadcast') {
+          def.type = 'broadcast';
+          def.triggers = [{ type: 'broadcast', value: 'broadcast' }];
+          def.description = def.description || 'Broadcast flow triggered by admin to multiple users';
+          def.steps = [{ say: 'This is a broadcast message.' }];
         } else {
           // Use triggers array format - treat trigger value as-is (command if starts with /, keyword otherwise)
           const triggerValue = trigger || ('/' + key);
