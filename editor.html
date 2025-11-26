@@ -1076,6 +1076,8 @@
         trig = def.triggers.map(t => {
           if (t.type === 'catch_all') {
             return '(catch-all)';
+          } else if (t.type === 'webhook') {
+            return `⚡${t.value || 'webhook'}`;
           } else {
             const val = t.value || '';
             return val.startsWith('/') ? val : `"${val}"`;
@@ -1650,6 +1652,8 @@
         triggerDisplay = def.triggers.map(t => {
           if (t.type === 'catch_all') {
             return '(catch-all)';
+          } else if (t.type === 'webhook') {
+            return `⚡${t.value || 'webhook'}`;
           } else {
             // Show trigger value as-is, adding / prefix if it starts with / or is a command-like value
             const val = t.value || '';
@@ -1782,15 +1786,19 @@
       if (!Array.isArray(def.triggers)) {
         def.triggers = [];
       }
+      // Migrate legacy webhook trigger to new structure if it exists and triggers array is empty
+      if (def.type === 'webhook' && def.trigger && typeof def.trigger === 'string' && def.triggers.length === 0) {
+        def.triggers.push({ type: 'webhook', value: def.trigger });
+      }
       // Migrate legacy trigger to new structure if it exists and triggers array is empty
-      if (def.trigger && typeof def.trigger === 'string' && def.triggers.length === 0) {
+      else if (def.trigger && typeof def.trigger === 'string' && def.triggers.length === 0) {
         const triggerValue = def.trigger.replace(/^\//, '');
         def.triggers.push({ type: 'trigger', value: triggerValue });
         // Remove legacy trigger after migration
         delete def.trigger;
       }
       // Also add legacy trigger if it exists and not already in triggers (for display during editing)
-      if (def.trigger && typeof def.trigger === 'string' && !def.triggers.some(t => (t.type === 'trigger' || t.type === 'command' || t.type === 'keyword') && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
+      if (def.trigger && typeof def.trigger === 'string' && def.type !== 'webhook' && !def.triggers.some(t => (t.type === 'trigger' || t.type === 'command' || t.type === 'keyword') && (t.value === def.trigger || t.value === def.trigger.replace(/^\//, '')))) {
         def.triggers.push({ type: 'trigger', value: def.trigger.replace(/^\//, '') });
       }
       // Migrate old command/keyword types to unified trigger type
@@ -1809,10 +1817,10 @@
         
         const typeSel = document.createElement('select');
         typeSel.style.flex = '0 0 120px';
-        ['trigger', 'catch_all', 'broadcast'].forEach(t => {
+        ['trigger', 'catch_all', 'broadcast', 'webhook'].forEach(t => {
           const opt = document.createElement('option');
           opt.value = t;
-          opt.textContent = t === 'trigger' ? 'Trigger' : (t === 'catch_all' ? 'Catch-all' : 'Broadcast');
+          opt.textContent = t === 'trigger' ? 'Trigger' : (t === 'catch_all' ? 'Catch-all' : (t === 'broadcast' ? 'Broadcast' : 'Webhook'));
           if (trigger.type === t || (t === 'trigger' && (trigger.type === 'command' || trigger.type === 'keyword' || trigger.type === 'phrase'))) opt.selected = true;
           typeSel.appendChild(opt);
         });
@@ -1827,6 +1835,9 @@
         } else if (trigger.type === 'broadcast') {
           valueInput.style.display = 'none';
           valueInput.value = 'broadcast';
+        } else if (trigger.type === 'webhook') {
+          valueInput.style.display = '';
+          valueInput.placeholder = 'webhook_name (e.g. ritual_continuation)';
         } else {
           valueInput.style.display = '';
           // Dynamic placeholder based on current value
@@ -1873,6 +1884,9 @@
           } else if (trigger.type === 'broadcast') {
             valueInput.style.display = 'none';
             valueInput.value = 'broadcast';
+          } else if (trigger.type === 'webhook') {
+            valueInput.style.display = '';
+            valueInput.placeholder = 'webhook_name (e.g. ritual_continuation)';
           } else {
             valueInput.style.display = '';
             const val = valueInput.value.trim();
@@ -1933,11 +1947,25 @@
       // Only save triggers array, remove legacy trigger field
       // Note: Don't filter empty triggers here - allow them during editing
       if (Array.isArray(def.triggers) && def.triggers.length > 0) {
-        // Remove legacy trigger field - we only use triggers array now
-        delete def.trigger;
+        // Check if there's a webhook trigger - if so, set def.type and def.trigger for compatibility
+        const webhookTrigger = def.triggers.find(t => t.type === 'webhook' && t.value);
+        if (webhookTrigger) {
+          def.type = 'webhook';
+          def.trigger = webhookTrigger.value;
+        } else {
+          // Remove legacy trigger field - we only use triggers array now
+          delete def.trigger;
+          // Only delete def.type if it was 'webhook' (don't interfere with other type values)
+          if (def.type === 'webhook') {
+            delete def.type;
+          }
+        }
       } else {
         delete def.triggers;
         delete def.trigger;
+        if (def.type === 'webhook') {
+          delete def.type;
+        }
       }
     }
     
