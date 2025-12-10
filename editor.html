@@ -2188,6 +2188,105 @@
       verSel.addEventListener('change', () => { const v = verSel.value; if (v) step.verification = v; else delete step.verification; });
       verWrap.appendChild(verLabel); verWrap.appendChild(verSel);
       container.appendChild(verWrap);
+      
+      // Poll options
+      // is_poll checkbox
+      const pollWrap = document.createElement('div'); pollWrap.className = 'field';
+      const pollLabel = document.createElement('label'); pollLabel.style.display = 'flex'; pollLabel.style.alignItems = 'center'; pollLabel.style.gap = '8px'; pollLabel.style.cursor = 'pointer';
+      const pollCheck = document.createElement('input'); pollCheck.type = 'checkbox';
+      pollCheck.checked = !!step.is_poll;
+      pollCheck.style.width = '16px'; pollCheck.style.height = '16px';
+      const pollLabelText = document.createElement('span'); pollLabelText.textContent = 'is_poll'; pollLabelText.style.color = '#94a3b8';
+      pollLabel.appendChild(pollCheck); pollLabel.appendChild(pollLabelText);
+      pollWrap.appendChild(pollLabel);
+      container.appendChild(pollWrap);
+      
+      // Container for poll sub-options (is_quiz, allows_multiple_answers, correct_option_id)
+      const pollOptionsContainer = document.createElement('div');
+      pollOptionsContainer.style.marginLeft = '24px';
+      pollOptionsContainer.style.display = step.is_poll ? 'block' : 'none';
+      
+      // is_quiz checkbox
+      const quizWrap = document.createElement('div'); quizWrap.className = 'field';
+      const quizLabel = document.createElement('label'); quizLabel.style.display = 'flex'; quizLabel.style.alignItems = 'center'; quizLabel.style.gap = '8px'; quizLabel.style.cursor = 'pointer';
+      const quizCheck = document.createElement('input'); quizCheck.type = 'checkbox';
+      quizCheck.checked = !!step.is_quiz;
+      quizCheck.style.width = '16px'; quizCheck.style.height = '16px';
+      const quizLabelText = document.createElement('span'); quizLabelText.textContent = 'is_quiz'; quizLabelText.style.color = '#94a3b8';
+      quizLabel.appendChild(quizCheck); quizLabel.appendChild(quizLabelText);
+      quizWrap.appendChild(quizLabel);
+      pollOptionsContainer.appendChild(quizWrap);
+      
+      // allows_multiple_answers checkbox (hidden when is_quiz is checked)
+      const multiWrap = document.createElement('div'); multiWrap.className = 'field';
+      multiWrap.style.display = step.is_quiz ? 'none' : 'block';
+      const multiLabel = document.createElement('label'); multiLabel.style.display = 'flex'; multiLabel.style.alignItems = 'center'; multiLabel.style.gap = '8px'; multiLabel.style.cursor = 'pointer';
+      const multiCheck = document.createElement('input'); multiCheck.type = 'checkbox';
+      multiCheck.checked = !!step.allows_multiple_answers;
+      multiCheck.style.width = '16px'; multiCheck.style.height = '16px';
+      const multiLabelText = document.createElement('span'); multiLabelText.textContent = 'allows_multiple_answers'; multiLabelText.style.color = '#94a3b8';
+      multiLabel.appendChild(multiCheck); multiLabel.appendChild(multiLabelText);
+      multiWrap.appendChild(multiLabel);
+      pollOptionsContainer.appendChild(multiWrap);
+      
+      // correct_option_id input (visible only when is_quiz is checked)
+      const correctWrap = document.createElement('div'); correctWrap.className = 'field';
+      correctWrap.style.display = step.is_quiz ? 'block' : 'none';
+      const correctLabel = document.createElement('div'); correctLabel.className = 'label'; correctLabel.textContent = 'correct_option_id';
+      const correctInput = document.createElement('input'); correctInput.type = 'number'; correctInput.min = '0';
+      correctInput.value = step.correct_option_id != null ? String(step.correct_option_id) : '';
+      correctInput.placeholder = '0-indexed (first option is 0)';
+      correctInput.style.background = 'rgba(17,24,39,0.6)'; correctInput.style.border = '1px solid #1f2937'; correctInput.style.color = '#e5e7eb'; correctInput.style.borderRadius = '8px'; correctInput.style.padding = '4px 8px'; correctInput.style.width = '100%';
+      correctWrap.appendChild(correctLabel); correctWrap.appendChild(correctInput);
+      pollOptionsContainer.appendChild(correctWrap);
+      
+      container.appendChild(pollOptionsContainer);
+      
+      // Event handlers for poll options
+      pollCheck.addEventListener('change', () => {
+        step.is_poll = pollCheck.checked;
+        if (!pollCheck.checked) {
+          delete step.is_quiz;
+          delete step.allows_multiple_answers;
+          delete step.correct_option_id;
+          quizCheck.checked = false;
+          multiCheck.checked = false;
+          correctInput.value = '';
+        }
+        pollOptionsContainer.style.display = pollCheck.checked ? 'block' : 'none';
+      });
+      
+      quizCheck.addEventListener('change', () => {
+        if (quizCheck.checked) {
+          step.is_quiz = true;
+          delete step.allows_multiple_answers;
+          multiCheck.checked = false;
+        } else {
+          delete step.is_quiz;
+          delete step.correct_option_id;
+          correctInput.value = '';
+        }
+        multiWrap.style.display = quizCheck.checked ? 'none' : 'block';
+        correctWrap.style.display = quizCheck.checked ? 'block' : 'none';
+      });
+      
+      multiCheck.addEventListener('change', () => {
+        if (multiCheck.checked) {
+          step.allows_multiple_answers = true;
+        } else {
+          delete step.allows_multiple_answers;
+        }
+      });
+      
+      correctInput.addEventListener('input', () => {
+        const v = correctInput.value.trim();
+        if (v !== '' && !isNaN(Number(v))) {
+          step.correct_option_id = Number(v);
+        } else {
+          delete step.correct_option_id;
+        }
+      });
+      
       return;
     }
 
