@@ -2178,6 +2178,17 @@
         }
       });
       container.appendChild(kbField);
+      // reply_keyboard checkbox (for standard Telegram reply keyboard)
+      const replyKbWrap = document.createElement('div'); replyKbWrap.className = 'field';
+      const replyKbLabel = document.createElement('label'); replyKbLabel.style.display = 'flex'; replyKbLabel.style.alignItems = 'center'; replyKbLabel.style.gap = '8px'; replyKbLabel.style.cursor = 'pointer';
+      const replyKbCheck = document.createElement('input'); replyKbCheck.type = 'checkbox';
+      replyKbCheck.checked = !!step.reply_keyboard;
+      replyKbCheck.style.width = '16px'; replyKbCheck.style.height = '16px';
+      const replyKbLabelText = document.createElement('span'); replyKbLabelText.textContent = 'reply_keyboard (standard text keyboard)'; replyKbLabelText.style.color = '#94a3b8';
+      replyKbLabel.appendChild(replyKbCheck); replyKbLabel.appendChild(replyKbLabelText);
+      replyKbWrap.appendChild(replyKbLabel);
+      container.appendChild(replyKbWrap);
+      replyKbCheck.addEventListener('change', () => { if (replyKbCheck.checked) step.reply_keyboard = true; else delete step.reply_keyboard; });
       // verification
       const verWrap = document.createElement('div'); verWrap.className = 'field';
       const verLabel = document.createElement('div'); verLabel.className = 'label'; verLabel.textContent = 'verification';
@@ -2337,6 +2348,17 @@
         }
       });
       container.appendChild(sayKbField);
+      // reply_keyboard checkbox (for standard Telegram reply keyboard)
+      const sayReplyKbWrap = document.createElement('div'); sayReplyKbWrap.className = 'field';
+      const sayReplyKbLabel = document.createElement('label'); sayReplyKbLabel.style.display = 'flex'; sayReplyKbLabel.style.alignItems = 'center'; sayReplyKbLabel.style.gap = '8px'; sayReplyKbLabel.style.cursor = 'pointer';
+      const sayReplyKbCheck = document.createElement('input'); sayReplyKbCheck.type = 'checkbox';
+      sayReplyKbCheck.checked = !!step.reply_keyboard;
+      sayReplyKbCheck.style.width = '16px'; sayReplyKbCheck.style.height = '16px';
+      const sayReplyKbLabelText = document.createElement('span'); sayReplyKbLabelText.textContent = 'reply_keyboard (standard text keyboard)'; sayReplyKbLabelText.style.color = '#94a3b8';
+      sayReplyKbLabel.appendChild(sayReplyKbCheck); sayReplyKbLabel.appendChild(sayReplyKbLabelText);
+      sayReplyKbWrap.appendChild(sayReplyKbLabel);
+      container.appendChild(sayReplyKbWrap);
+      sayReplyKbCheck.addEventListener('change', () => { if (sayReplyKbCheck.checked) step.reply_keyboard = true; else delete step.reply_keyboard; });
       const uidInit = step.user_id != null ? String(step.user_id) : '';
       container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
       return;
@@ -2711,6 +2733,17 @@
         if (lines.length > 0) step.keyboard = lines; else delete step.keyboard;
       });
       container.appendChild(kbField);
+      // reply_keyboard checkbox (for standard Telegram reply keyboard)
+      const invReplyKbWrap = document.createElement('div'); invReplyKbWrap.className = 'field';
+      const invReplyKbLabel = document.createElement('label'); invReplyKbLabel.style.display = 'flex'; invReplyKbLabel.style.alignItems = 'center'; invReplyKbLabel.style.gap = '8px'; invReplyKbLabel.style.cursor = 'pointer';
+      const invReplyKbCheck = document.createElement('input'); invReplyKbCheck.type = 'checkbox';
+      invReplyKbCheck.checked = !!step.reply_keyboard;
+      invReplyKbCheck.style.width = '16px'; invReplyKbCheck.style.height = '16px';
+      const invReplyKbLabelText = document.createElement('span'); invReplyKbLabelText.textContent = 'reply_keyboard (standard text keyboard)'; invReplyKbLabelText.style.color = '#94a3b8';
+      invReplyKbLabel.appendChild(invReplyKbCheck); invReplyKbLabel.appendChild(invReplyKbLabelText);
+      invReplyKbWrap.appendChild(invReplyKbLabel);
+      container.appendChild(invReplyKbWrap);
+      invReplyKbCheck.addEventListener('change', () => { if (invReplyKbCheck.checked) step.reply_keyboard = true; else delete step.reply_keyboard; });
       return;
     }
 
