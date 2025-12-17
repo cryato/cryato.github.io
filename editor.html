@@ -1871,6 +1871,27 @@
         globalLabel.style.flex = '0 0 auto';
         globalLabel.appendChild(globalCheckbox);
         
+        // Allow Parallel Runs checkbox
+        const parallelCheckbox = document.createElement('input');
+        parallelCheckbox.type = 'checkbox';
+        parallelCheckbox.style.flex = '0 0 auto';
+        parallelCheckbox.style.width = 'auto';
+        parallelCheckbox.style.marginRight = '4px';
+        const isParallelSet = trigger.hasOwnProperty('allow_parallel_runs') && (trigger.allow_parallel_runs === true || trigger.allow_parallel_runs === 'true');
+        parallelCheckbox.checked = isParallelSet;
+        parallelCheckbox.title = 'Allow Parallel Runs: allow multiple instances with different flow_variables';
+        
+        const parallelLabel = document.createElement('label');
+        parallelLabel.textContent = 'Parallel';
+        parallelLabel.style.fontSize = '12px';
+        parallelLabel.style.color = 'var(--muted)';
+        parallelLabel.style.cursor = 'pointer';
+        parallelLabel.style.display = 'flex';
+        parallelLabel.style.alignItems = 'center';
+        parallelLabel.style.gap = '4px';
+        parallelLabel.style.flex = '0 0 auto';
+        parallelLabel.appendChild(parallelCheckbox);
+        
         const btnRemove = document.createElement('button');
         btnRemove.className = 'btn';
         btnRemove.textContent = 'Remove';
@@ -1917,6 +1938,21 @@
           }
         });
         
+        parallelCheckbox.addEventListener('change', () => {
+          if (parallelCheckbox.checked) {
+            trigger.allow_parallel_runs = true;
+          } else {
+            delete trigger.allow_parallel_runs;
+          }
+          saveTriggers();
+        });
+        
+        parallelLabel.addEventListener('click', (e) => {
+          if (e.target !== parallelCheckbox) {
+            parallelCheckbox.click();
+          }
+        });
+        
         btnRemove.addEventListener('click', () => {
           triggers.splice(idx, 1);
           renderTriggers();
@@ -1926,6 +1962,7 @@
         triggerRow.appendChild(typeSel);
         triggerRow.appendChild(valueInput);
         triggerRow.appendChild(globalLabel);
+        triggerRow.appendChild(parallelLabel);
         triggerRow.appendChild(btnRemove);
         triggersContainer.appendChild(triggerRow);
       });
