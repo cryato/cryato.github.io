@@ -1871,27 +1871,6 @@
         globalLabel.style.flex = '0 0 auto';
         globalLabel.appendChild(globalCheckbox);
         
-        // Allow Parallel Runs checkbox
-        const parallelCheckbox = document.createElement('input');
-        parallelCheckbox.type = 'checkbox';
-        parallelCheckbox.style.flex = '0 0 auto';
-        parallelCheckbox.style.width = 'auto';
-        parallelCheckbox.style.marginRight = '4px';
-        const isParallelSet = trigger.hasOwnProperty('allow_parallel_runs') && (trigger.allow_parallel_runs === true || trigger.allow_parallel_runs === 'true');
-        parallelCheckbox.checked = isParallelSet;
-        parallelCheckbox.title = 'Allow Parallel Runs: allow multiple instances with different flow_variables';
-        
-        const parallelLabel = document.createElement('label');
-        parallelLabel.textContent = 'Parallel';
-        parallelLabel.style.fontSize = '12px';
-        parallelLabel.style.color = 'var(--muted)';
-        parallelLabel.style.cursor = 'pointer';
-        parallelLabel.style.display = 'flex';
-        parallelLabel.style.alignItems = 'center';
-        parallelLabel.style.gap = '4px';
-        parallelLabel.style.flex = '0 0 auto';
-        parallelLabel.appendChild(parallelCheckbox);
-        
         const btnRemove = document.createElement('button');
         btnRemove.className = 'btn';
         btnRemove.textContent = 'Remove';
@@ -1938,21 +1917,6 @@
           }
         });
         
-        parallelCheckbox.addEventListener('change', () => {
-          if (parallelCheckbox.checked) {
-            trigger.allow_parallel_runs = true;
-          } else {
-            delete trigger.allow_parallel_runs;
-          }
-          saveTriggers();
-        });
-        
-        parallelLabel.addEventListener('click', (e) => {
-          if (e.target !== parallelCheckbox) {
-            parallelCheckbox.click();
-          }
-        });
-        
         btnRemove.addEventListener('click', () => {
           triggers.splice(idx, 1);
           renderTriggers();
@@ -1962,7 +1926,6 @@
         triggerRow.appendChild(typeSel);
         triggerRow.appendChild(valueInput);
         triggerRow.appendChild(globalLabel);
-        triggerRow.appendChild(parallelLabel);
         triggerRow.appendChild(btnRemove);
         triggersContainer.appendChild(triggerRow);
       });
@@ -2010,6 +1973,46 @@
     triggersWrap.appendChild(triggersLabel);
     triggersWrap.appendChild(triggersContainer);
     els.steps.appendChild(triggersWrap);
+
+    // Allow Parallel Runs checkbox (flow-level setting)
+    const parallelWrap = document.createElement('div');
+    parallelWrap.className = 'field';
+    parallelWrap.style.display = 'flex';
+    parallelWrap.style.alignItems = 'center';
+    parallelWrap.style.gap = '8px';
+    
+    const parallelCheckbox = document.createElement('input');
+    parallelCheckbox.type = 'checkbox';
+    parallelCheckbox.id = 'allow_parallel_runs';
+    parallelCheckbox.checked = def.allow_parallel_runs === true;
+    parallelCheckbox.style.width = 'auto';
+    parallelCheckbox.style.margin = '0';
+    
+    const parallelLabel = document.createElement('label');
+    parallelLabel.htmlFor = 'allow_parallel_runs';
+    parallelLabel.textContent = 'Allow Parallel Runs';
+    parallelLabel.style.fontSize = '13px';
+    parallelLabel.style.color = 'var(--fg)';
+    parallelLabel.style.cursor = 'pointer';
+    parallelLabel.title = 'When enabled, multiple instances of this flow can run simultaneously if triggered with different variables';
+    
+    const parallelHelp = document.createElement('span');
+    parallelHelp.textContent = '(allows multiple instances with different flow_variables)';
+    parallelHelp.style.fontSize = '11px';
+    parallelHelp.style.color = 'var(--muted)';
+    
+    parallelCheckbox.addEventListener('change', () => {
+      if (parallelCheckbox.checked) {
+        def.allow_parallel_runs = true;
+      } else {
+        delete def.allow_parallel_runs;
+      }
+    });
+    
+    parallelWrap.appendChild(parallelCheckbox);
+    parallelWrap.appendChild(parallelLabel);
+    parallelWrap.appendChild(parallelHelp);
+    els.steps.appendChild(parallelWrap);
 
     // Flow filters editor
     const filtersWrap = document.createElement('div');
