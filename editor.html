@@ -2000,12 +2000,54 @@
     parallelHelp.textContent = '(allows multiple instances with different flow_variables)';
     parallelHelp.style.fontSize = '11px';
     parallelHelp.style.color = 'var(--muted)';
+
+    // Allow All Parallel Runs checkbox (only visible when allow_parallel_runs is enabled)
+    const allowAllWrap = document.createElement('div');
+    allowAllWrap.className = 'field';
+    allowAllWrap.style.display = (def.allow_parallel_runs === true) ? 'flex' : 'none';
+    allowAllWrap.style.alignItems = 'center';
+    allowAllWrap.style.gap = '8px';
+    allowAllWrap.style.marginTop = '-6px';
+    allowAllWrap.style.marginLeft = '18px';
+    
+    const allowAllCheckbox = document.createElement('input');
+    allowAllCheckbox.type = 'checkbox';
+    allowAllCheckbox.id = 'allow_all';
+    allowAllCheckbox.checked = def.allow_all === true;
+    allowAllCheckbox.style.width = 'auto';
+    allowAllCheckbox.style.margin = '0';
+    
+    const allowAllLabel = document.createElement('label');
+    allowAllLabel.htmlFor = 'allow_all';
+    allowAllLabel.textContent = 'Allow All Parallel Runs';
+    allowAllLabel.style.fontSize = '13px';
+    allowAllLabel.style.color = 'var(--fg)';
+    allowAllLabel.style.cursor = 'pointer';
+    allowAllLabel.title = 'When enabled, this flow can run in parallel even if triggered with the same variables (no de-duplication)';
+    
+    const allowAllHelp = document.createElement('span');
+    allowAllHelp.textContent = '(disable duplicate detection for this flow)';
+    allowAllHelp.style.fontSize = '11px';
+    allowAllHelp.style.color = 'var(--muted)';
+    
+    allowAllCheckbox.addEventListener('change', () => {
+      if (allowAllCheckbox.checked) {
+        def.allow_all = true;
+      } else {
+        delete def.allow_all;
+      }
+    });
     
     parallelCheckbox.addEventListener('change', () => {
       if (parallelCheckbox.checked) {
         def.allow_parallel_runs = true;
+        allowAllWrap.style.display = 'flex';
       } else {
         delete def.allow_parallel_runs;
+        // When parallel runs are disabled, force-disable allow_all too (and hide it)
+        delete def.allow_all;
+        allowAllCheckbox.checked = false;
+        allowAllWrap.style.display = 'none';
       }
     });
     
@@ -2013,6 +2055,11 @@
     parallelWrap.appendChild(parallelLabel);
     parallelWrap.appendChild(parallelHelp);
     els.steps.appendChild(parallelWrap);
+
+    allowAllWrap.appendChild(allowAllCheckbox);
+    allowAllWrap.appendChild(allowAllLabel);
+    allowAllWrap.appendChild(allowAllHelp);
+    els.steps.appendChild(allowAllWrap);
 
     // Flow filters editor
     const filtersWrap = document.createElement('div');
