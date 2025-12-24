@@ -2448,6 +2448,12 @@
       sayReplyKbCheck.addEventListener('change', () => { if (sayReplyKbCheck.checked) step.reply_keyboard = true; else delete step.reply_keyboard; });
       const uidInit = step.user_id != null ? String(step.user_id) : '';
       container.appendChild(fieldText('user_id', uidInit, (v) => { if (v) step.user_id = v; else delete step.user_id; }, true));
+      // saveAs field - stores the Telegram API response (includes message_id, date, etc.)
+      const saveAsInit = step.saveAs != null ? String(step.saveAs) : '';
+      container.appendChild(fieldText('saveAs', saveAsInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
+      // message_id field - when provided, edits existing message instead of sending new one
+      const msgIdInit = step.message_id != null ? String(step.message_id) : '';
+      container.appendChild(fieldText('message_id (edit mode)', msgIdInit, (v) => { if (v) step.message_id = v; else delete step.message_id; }, true));
       return;
     }
 
@@ -3364,11 +3370,15 @@
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
         const url2 = document.createElement('input'); url2.type = 'text'; url2.placeholder = 'video_url (optional, supports {{variables}})';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
+        const saveAs = document.createElement('input'); saveAs.type = 'text'; saveAs.placeholder = 'saveAs (optional, stores Telegram response)';
+        const msgId = document.createElement('input'); msgId.type = 'text'; msgId.placeholder = 'message_id (optional, edit mode - edits existing message)';
         const kb = document.createElement('textarea'); kb.placeholder = 'keyboard (optional; one per line; hidden settings in [..])';
         formWrap.appendChild(field('say', ta));
         formWrap.appendChild(field('photo_url', url));
         formWrap.appendChild(field('video_url', url2));
         formWrap.appendChild(field('user_id', uid));
+        formWrap.appendChild(field('saveAs', saveAs));
+        formWrap.appendChild(field('message_id (edit mode)', msgId));
         formWrap.appendChild(field('keyboard', kb));
       } else if (t === 'ask') {
         const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
@@ -3521,9 +3531,13 @@
         const photo = inputs && inputs[0];
         const video = inputs && inputs[1];
         const uid = inputs && inputs[2];
+        const saveAsEl = inputs && inputs[3];
+        const msgIdEl = inputs && inputs[4];
         if (photo && photo.value) step.photo_url = String(photo.value);
         if (video && video.value) step.video_url = String(video.value);
         if (uid && uid.value) step.user_id = String(uid.value);
+        if (saveAsEl && saveAsEl.value) step.saveAs = String(saveAsEl.value);
+        if (msgIdEl && msgIdEl.value) step.message_id = String(msgIdEl.value);
         const kbEl = formWrap.querySelector('textarea:nth-of-type(2)');
         if (kbEl && kbEl.value) {
           const lines = String(kbEl.value || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
