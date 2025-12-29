@@ -2742,7 +2742,12 @@
       const cfg = step.sheets_update_row || {};
       const f1 = fieldText('spreadsheetId', cfg.spreadsheetId || '', (v) => { cfg.spreadsheetId = v; sync(); }, true);
       const f2 = fieldText('range', cfg.range || '', (v) => { cfg.range = v; sync(); }, true);
-      const f3 = fieldText('rowIndex', (cfg.rowIndex != null ? String(cfg.rowIndex) : ''), (v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) cfg.rowIndex = n; else delete cfg.rowIndex; sync(); }, true);
+      const f3 = fieldText('rowIndex', (cfg.rowIndex != null ? String(cfg.rowIndex) : ''), (v) => { 
+        const trimmed = String(v).trim();
+        if (!trimmed) { delete cfg.rowIndex; } 
+        else { const n = Number(trimmed); if (Number.isFinite(n) && n > 0) cfg.rowIndex = n; else cfg.rowIndex = trimmed; } 
+        sync(); 
+      }, true);
       // cells
       const cellsWrap = document.createElement('div'); cellsWrap.className = 'field';
       const cl = document.createElement('div'); cl.className = 'label'; cl.textContent = 'cells';
