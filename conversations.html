@@ -144,6 +144,69 @@
       el.innerHTML = `<div class="empty"><div style="font-weight:600; color:#fecaca;">${msg}</div>${d}</div>`;
     }
 
+    async function diagnoseIdentityToolkit(apiKey) {
+      const out = { ok: false, status: 0, body: null, url: '' };
+      if (!apiKey) return out;
+      const url = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`;
+      out.url = url;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ returnSecureToken: true }),
+          cache: 'no-store'
+        });
+        out.status = res.status;
+        const text = await res.text();
+        try { out.body = JSON.parse(text); } catch (_) { out.body = text; }
+        out.ok = res.ok;
+        return out;
+      } catch (e) {
+        out.body = { exception: e && e.message ? e.message : String(e) };
+        return out;
+      }
+    }
+
+    function explainIdentityToolkitDiagnosis(diag) {
+      const msg = diag && diag.body && diag.body.error && diag.body.error.message ? String(diag.body.error.message) : '';
+      if (!msg) return '';
+      // Common Identity Toolkit / Firebase Auth setup failures
+      if (msg.includes('CONFIGURATION_NOT_FOUND')) {
+        return [
+          'Identity Toolkit returned CONFIGURATION_NOT_FOUND.',
+          'This usually means Firebase Authentication/Identity Platform is not enabled/configured for this Google Cloud project, or the API key is not allowed to use Identity Toolkit.',
+          'Fix: In Firebase Console → Authentication → Get started (or Sign-in method), enable Authentication and enable Anonymous (or another provider).',
+          'Also check: Google Cloud Console → APIs & Services → API key restrictions (allow Identity Toolkit) + HTTP referrers include your site.'
+        ].join('\n');
+      }
+      if (msg.includes('OPERATION_NOT_ALLOWED')) {
+        return [
+          'Identity Toolkit returned OPERATION_NOT_ALLOWED.',
+          'This usually means the provider you are trying to use is disabled.',
+          'Fix: Firebase Console → Authentication → Sign-in method → enable Anonymous.'
+        ].join('\n');
+      }
+      if (msg.includes('API_KEY_INVALID')) {
+        return [
+          'Identity Toolkit returned API_KEY_INVALID.',
+          'Fix: ensure firebase_config.json has the correct apiKey for projectId/authDomain.'
+        ].join('\n');
+      }
+      if (msg.includes('API_KEY_HTTP_REFERRER_BLOCKED')) {
+        return [
+          'Identity Toolkit returned API_KEY_HTTP_REFERRER_BLOCKED.',
+          'Fix: in Google Cloud Console → APIs & Services → Credentials, edit this API key and add your site origin to HTTP referrers (or remove referrer restriction).'
+        ].join('\n');
+      }
+      if (msg.includes('PROJECT_NOT_FOUND')) {
+        return [
+          'Identity Toolkit returned PROJECT_NOT_FOUND.',
+          'Fix: firebase_config.json likely points to a deleted/wrong projectId or mismatched apiKey.'
+        ].join('\n');
+      }
+      return `Identity Toolkit error: ${msg}`;
+    }
+
     async function main() {
       const els = {
         inpUserId: document.getElementById('inpUserId'),
@@ -345,23 +408,42 @@
       els.btnReload.addEventListener('click', loadInitial);
 
       onAuthStateChanged(auth, async (user) => {
-        try {
-          if (!user) {
+        let authOk = !!user;
+        if (!user) {
+          try {
             console.log(TAG, 'No Firebase user yet; attempting anonymous sign-in…');
             await signInAnonymously(auth);
+            authOk = true;
+          } catch (e) {
+            const diag = await diagnoseIdentityToolkit(cfg.apiKey);
+            const hint = explainIdentityToolkitDiagnosis(diag);
+            console.error(TAG, 'Firebase auth/init failed', {
+              code: e && e.code ? e.code : undefined,
+              message: e && e.message ? e.message : String(e),
+              cfg: { projectId: cfg.projectId, authDomain: cfg.authDomain || '(empty)' },
+              identityToolkit: diag && diag.body ? diag.body : null
+            });
+            // Don't hard-stop here: Firestore might still be readable (public rules). Try loading and show both errors if it fails.
+            renderFatal('Firebase auth failed (continuing to try loading Firestore)…', JSON.stringify({
+              code: e && e.code ? e.code : undefined,
+              message: e && e.message ? e.message : String(e),
+              projectId: cfg.projectId,
+              authDomain: cfg.authDomain || '',
+              identityToolkitStatus: diag.status || 0,
+              identityToolkitBody: diag.body || null,
+              hint
+            }, null, 2));
           }
+        }
+        try {
           await loadInitial();
+          if (!authOk) console.warn(TAG, 'Loaded Firestore without Firebase Auth user (rules likely allow reads).');
         } catch (e) {
-          console.error(TAG, 'Firebase auth/init failed', {
+          console.error(TAG, 'Firestore query failed', { code: e && e.code ? e.code : undefined, message: e && e.message ? e.message : String(e) });
+          renderFatal('Failed to load conversations from Firestore.', JSON.stringify({
             code: e && e.code ? e.code : undefined,
             message: e && e.message ? e.message : String(e),
-            cfg: { projectId: cfg.projectId, authDomain: cfg.authDomain || '(empty)' }
-          });
-          renderFatal('Firebase auth failed while opening conversations.', JSON.stringify({
-            code: e && e.code ? e.code : undefined,
-            message: e && e.message ? e.message : String(e),
-            projectId: cfg.projectId,
-            authDomain: cfg.authDomain || ''
+            hint: 'If this is "permission-denied", update Firestore security rules or ensure Firebase Auth works.'
           }, null, 2));
         }
       });
