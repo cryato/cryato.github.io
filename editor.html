@@ -1832,9 +1832,13 @@
         if (trigger.type === 'catch_all') {
           valueInput.style.display = 'none';
           valueInput.value = 'catch-all';
+          // Ensure the underlying trigger persists through publish-time filtering
+          trigger.value = 'catch-all';
         } else if (trigger.type === 'broadcast') {
           valueInput.style.display = 'none';
           valueInput.value = 'broadcast';
+          // Ensure the underlying trigger persists through publish-time filtering
+          trigger.value = 'broadcast';
         } else if (trigger.type === 'webhook') {
           valueInput.style.display = '';
           valueInput.placeholder = 'webhook_name (e.g. ritual_continuation)';
@@ -1881,9 +1885,11 @@
           if (trigger.type === 'catch_all') {
             valueInput.style.display = 'none';
             valueInput.value = 'catch-all';
+            trigger.value = 'catch-all';
           } else if (trigger.type === 'broadcast') {
             valueInput.style.display = 'none';
             valueInput.value = 'broadcast';
+            trigger.value = 'broadcast';
           } else if (trigger.type === 'webhook') {
             valueInput.style.display = '';
             valueInput.placeholder = 'webhook_name (e.g. ritual_continuation)';
@@ -1947,6 +1953,15 @@
       // Only save triggers array, remove legacy trigger field
       // Note: Don't filter empty triggers here - allow them during editing
       if (Array.isArray(def.triggers) && def.triggers.length > 0) {
+        // Normalize special trigger types so they are persisted consistently
+        try {
+          def.triggers.forEach((t) => {
+            if (!t || typeof t !== 'object') return;
+            if (t.type === 'catch_all') t.value = 'catch-all';
+            if (t.type === 'broadcast') t.value = 'broadcast';
+            if (typeof t.value === 'string') t.value = t.value.trim();
+          });
+        } catch (_) {}
         // Check if there's a webhook trigger - if so, set def.type and def.trigger for compatibility
         const webhookTrigger = def.triggers.find(t => t.type === 'webhook' && t.value);
         if (webhookTrigger) {
@@ -4039,7 +4054,12 @@
         // Remove legacy trigger field
         delete def.trigger;
         // Filter out empty triggers only when actually saving to server
-        def.triggers = def.triggers.filter(t => t && t.value && String(t.value).trim().length > 0);
+        def.triggers = def.triggers.filter(t => {
+          if (!t) return false;
+          // Keep catch-all/broadcast even if value is missing (we normalize value elsewhere, but be defensive)
+          if (t.type === 'catch_all' || t.type === 'broadcast') return true;
+          return !!(t.value && String(t.value).trim().length > 0);
+        });
         if (def.triggers.length === 0) {
           delete def.triggers;
         }
