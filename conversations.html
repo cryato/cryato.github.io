@@ -277,17 +277,37 @@
       els.inpStart.value = toDateInput(startDefault);
       els.inpEnd.value = toDateInput(today);
 
-      let paging = { last: null, done: false, pageSize: 30 };
+      // NOTE: chat_id has historically been written as either a number or a string.
+      // This UI queries BOTH representations and merges results so conversations remain visible.
+      let paging = { byKey: Object.create(null), pageSize: 30 };
 
-      function coerceUserId(val) {
-        const n = Number(val);
-        return Number.isFinite(n) ? n : val;
+      function chatIdCandidates(userIdRaw) {
+        const s = String(userIdRaw || '').trim();
+        if (!s) return [];
+        const out = [];
+        if (/^-?\d+$/.test(s)) {
+          const n = Number(s);
+          if (Number.isFinite(n)) out.push({ key: 'num', value: n });
+        }
+        out.push({ key: 'str', value: s });
+        // de-dupe by key+type+stringified value
+        const seen = new Set();
+        return out.filter((c) => {
+          const k = `${c.key}:${typeof c.value}:${String(c.value)}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
       }
 
-      function buildQuery(userIdRaw, startDate, endDate) {
-        const userId = coerceUserId(userIdRaw);
+      function ensurePagingKey(key) {
+        if (!paging.byKey[key]) paging.byKey[key] = { last: null, done: false };
+        return paging.byKey[key];
+      }
+
+      function buildQueryForChatId(chatIdValue, startDate, endDate, pageState) {
         const col = collection(db, 'conversations');
-        const constraints = [ where('chat_id', '==', userId), orderBy('date', 'desc'), limit(paging.pageSize) ];
+        const constraints = [ where('chat_id', '==', chatIdValue), orderBy('date', 'desc'), limit(paging.pageSize) ];
         // date is timestampValue in server; when loaded via SDK, it is a Firestore Timestamp
         if (startDate) constraints.push(where('date', '>=', Timestamp.fromDate(startDate)));
         if (endDate) {
@@ -295,8 +315,20 @@
           end.setHours(23,59,59,999);
           constraints.push(where('date', '<=', Timestamp.fromDate(end)));
         }
-        if (paging.last) constraints.push(startAfter(paging.last));
+        if (pageState && pageState.last) constraints.push(startAfter(pageState.last));
         return query(col, ...constraints);
+      }
+
+      function tsToMillis(t) {
+        try {
+          if (!t) return 0;
+          if (typeof t.toMillis === 'function') return t.toMillis();
+          if (t instanceof Date) return t.getTime();
+          const d = new Date(t);
+          return isNaN(d.getTime()) ? 0 : d.getTime();
+        } catch (_) {
+          return 0;
+        }
       }
 
       function clearAndRenderEmpty() {
@@ -362,33 +394,54 @@
         }
       }
 
+      async function fetchMergedBatch(cands, startDate, endDate) {
+        const byId = new Map();
+        let anyNonEmpty = false;
+
+        for (const c of cands) {
+          const st = ensurePagingKey(c.key);
+          if (st.done) continue;
+          const q = buildQueryForChatId(c.value, startDate, endDate, st);
+          const snap = await getDocs(q);
+          if (snap.empty) {
+            st.done = true;
+            continue;
+          }
+          anyNonEmpty = true;
+          const docsDesc = snap.docs;
+          st.last = docsDesc[docsDesc.length - 1];
+          for (const d of docsDesc) {
+            if (!byId.has(d.id)) byId.set(d.id, d);
+          }
+        }
+
+        const merged = Array.from(byId.values());
+        merged.sort((a, b) => tsToMillis(a.data().date) - tsToMillis(b.data().date)); // ASC for rendering
+        return { docsAsc: merged, anyNonEmpty };
+      }
+
       async function loadInitial() {
-        const userId = els.inpUserId.value.trim();
-        if (!userId) { clearAndRenderEmpty(); return; }
-        paging = { last: null, done: false, pageSize: 25 };
+        const userIdRaw = els.inpUserId.value.trim();
+        if (!userIdRaw) { clearAndRenderEmpty(); return; }
+        paging = { byKey: Object.create(null), pageSize: 25 };
+        const cands = chatIdCandidates(userIdRaw);
         const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
         const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
-        const q = buildQuery(userId, s, e);
-        const snap = await getDocs(q);
-        if (snap.empty) { clearAndRenderEmpty(); return; }
-        const docsDesc = snap.docs;
-        paging.last = docsDesc[docsDesc.length - 1];
-        const docsAsc = docsDesc.slice().reverse();
+        const { docsAsc, anyNonEmpty } = await fetchMergedBatch(cands, s, e);
+        if (!anyNonEmpty || docsAsc.length === 0) { clearAndRenderEmpty(); return; }
         renderMessagesAsc(docsAsc, { prepend: false });
       }
 
       async function loadMore() {
-        if (paging.done) return;
-        const userId = els.inpUserId.value.trim();
-        if (!userId) return;
+        const userIdRaw = els.inpUserId.value.trim();
+        if (!userIdRaw) return;
+        const cands = chatIdCandidates(userIdRaw);
+        // if all candidates are done, stop
+        if (cands.every((c) => ensurePagingKey(c.key).done)) return;
         const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
         const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
-        const q = buildQuery(userId, s, e);
-        const snap = await getDocs(q);
-        if (snap.empty) { paging.done = true; return; }
-        const docsDesc = snap.docs;
-        paging.last = docsDesc[docsDesc.length - 1];
-        const docsAsc = docsDesc.slice().reverse();
+        const { docsAsc, anyNonEmpty } = await fetchMergedBatch(cands, s, e);
+        if (!anyNonEmpty || docsAsc.length === 0) return;
         renderMessagesAsc(docsAsc, { prepend: true });
       }
 
