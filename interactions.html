@@ -198,13 +198,17 @@
       const p = (async () => {
         try {
           const colRef = collection(db, 'conversations');
-          const q = query(colRef, where('request_id', '==', requestId), where('chat_id', '==', coerce(chatId)));
-          const snap = await getDocs(q);
           const map = new Map();
-          snap.forEach((doc) => {
-            const d = doc.data();
-            if (d && d.message_id != null) map.set(String(d.message_id), d);
-          });
+          // chat_id has historically been written as either a number or a string; query both.
+          const cands = chatIdCandidates(chatId);
+          for (const c of cands) {
+            const q = query(colRef, where('request_id', '==', requestId), where('chat_id', '==', c.value));
+            const snap = await getDocs(q);
+            snap.forEach((doc) => {
+              const d = doc.data();
+              if (d && d.message_id != null) map.set(String(d.message_id), d);
+            });
+          }
           return map;
         } catch (_) {
           return new Map();
@@ -227,11 +231,43 @@
     els.inpStart.value = url.searchParams.get('start') || toDateInput(startDefault);
     els.inpEnd.value = url.searchParams.get('end') || toDateInput(today);
 
-    let paging = { last: null, done: false, pageSize: 30 };
+    // chat_id has historically been written as either a number or a string.
+    // When filtering by user_id/chat_id, we query BOTH representations and merge results.
+    let paging = { last: null, done: false, pageSize: 30, byKey: Object.create(null) };
 
-    function coerce(val) {
-      const n = Number(val);
-      return Number.isFinite(n) ? n : val;
+    function chatIdCandidates(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return [];
+      const out = [];
+      if (/^-?\d+$/.test(s)) {
+        const n = Number(s);
+        if (Number.isFinite(n)) out.push({ key: 'num', value: n });
+      }
+      out.push({ key: 'str', value: s });
+      const seen = new Set();
+      return out.filter((c) => {
+        const k = `${c.key}:${typeof c.value}:${String(c.value)}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+
+    function ensurePagingKey(key) {
+      if (!paging.byKey[key]) paging.byKey[key] = { last: null, done: false };
+      return paging.byKey[key];
+    }
+
+    function tsToMillis(t) {
+      try {
+        if (!t) return 0;
+        if (typeof t.toMillis === 'function') return t.toMillis();
+        if (t instanceof Date) return t.getTime();
+        const d = new Date(t);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+      } catch (_) {
+        return 0;
+      }
     }
 
     function renderEmpty() {
@@ -1450,7 +1486,7 @@
       const col = collection(db, 'interactions');
       const constraints = [];
       if (requestId) constraints.push(where('request_id', '==', requestId));
-      if (userId) constraints.push(where('chat_id', '==', coerce(userId)));
+      if (userId) constraints.push(where('chat_id', '==', userId));
       // order by trigger time desc and filter using Date objects (timestamp fields)
       constraints.push(orderBy('flow_trigger.triggered_at', 'desc'));
       if (startDate) constraints.push(where('flow_trigger.triggered_at', '>=', startDate));
@@ -1464,10 +1500,56 @@
       return query(col, ...constraints);
     }
 
+    function buildRunsQueryForChatId(chatIdValue, { startDate, endDate }, pageState) {
+      const col = collection(db, 'interactions');
+      const constraints = [];
+      constraints.push(where('chat_id', '==', chatIdValue));
+      constraints.push(orderBy('flow_trigger.triggered_at', 'desc'));
+      if (startDate) constraints.push(where('flow_trigger.triggered_at', '>=', startDate));
+      if (endDate) {
+        const end = new Date(endDate.getTime());
+        end.setHours(23,59,59,999);
+        constraints.push(where('flow_trigger.triggered_at', '<=', end));
+      }
+      constraints.push(limit(paging.pageSize));
+      if (pageState && pageState.last) constraints.push(startAfter(pageState.last));
+      return query(col, ...constraints);
+    }
+
+    async function fetchMergedRunsBatch(cands, { startDate, endDate }) {
+      const byId = new Map();
+      let anyNonEmpty = false;
+
+      for (const c of cands) {
+        const st = ensurePagingKey(c.key);
+        if (st.done) continue;
+        const q = buildRunsQueryForChatId(c.value, { startDate, endDate }, st);
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          st.done = true;
+          continue;
+        }
+        anyNonEmpty = true;
+        const docsDesc = snap.docs;
+        st.last = docsDesc[docsDesc.length - 1];
+        for (const d of docsDesc) {
+          if (!byId.has(d.id)) byId.set(d.id, d);
+        }
+      }
+
+      const merged = Array.from(byId.values());
+      merged.sort((a, b) => {
+        const at = a.data() && a.data().flow_trigger ? a.data().flow_trigger.triggered_at : null;
+        const bt = b.data() && b.data().flow_trigger ? b.data().flow_trigger.triggered_at : null;
+        return tsToMillis(at) - tsToMillis(bt); // ASC for rendering
+      });
+      return { docsAsc: merged, anyNonEmpty };
+    }
+
     async function loadInitial() {
       const requestId = els.inpRequestId.value.trim();
       const userId = els.inpUserId.value.trim();
-      paging = { last: null, done: false, pageSize: 30 };
+      paging = { last: null, done: false, pageSize: 30, byKey: Object.create(null) };
       const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
       const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
 
@@ -1481,24 +1563,40 @@
         return;
       }
 
-      const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
-      const snap = await getDocs(q);
-      if (snap.empty) { renderEmpty(); return; }
-      const docsDesc = snap.docs;
-      paging.last = docsDesc[docsDesc.length - 1];
-      const docsAsc = docsDesc.slice().reverse();
+      let docsAsc = [];
+      if (userId) {
+        const cands = chatIdCandidates(userId);
+        const res = await fetchMergedRunsBatch(cands, { startDate: s, endDate: e });
+        if (!res.anyNonEmpty || res.docsAsc.length === 0) { renderEmpty(); return; }
+        docsAsc = res.docsAsc;
+      } else {
+        const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
+        const snap = await getDocs(q);
+        if (snap.empty) { renderEmpty(); return; }
+        const docsDesc = snap.docs;
+        paging.last = docsDesc[docsDesc.length - 1];
+        docsAsc = docsDesc.slice().reverse();
+      }
       els.viewSingle.style.display = 'none';
       els.viewList.style.display = '';
       renderRuns(docsAsc, { prepend: false });
     }
 
     async function loadMore() {
-      if (paging.done) return;
       const requestId = els.inpRequestId.value.trim();
       if (requestId) { paging.done = true; return; }
       const userId = els.inpUserId.value.trim();
       const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
       const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
+      if (userId) {
+        const cands = chatIdCandidates(userId);
+        if (cands.every((c) => ensurePagingKey(c.key).done)) return;
+        const res = await fetchMergedRunsBatch(cands, { startDate: s, endDate: e });
+        if (!res.anyNonEmpty || res.docsAsc.length === 0) return;
+        renderRuns(res.docsAsc, { prepend: true });
+        return;
+      }
+      if (paging.done) return;
       const q = buildRunsQuery({ requestId, userId, startDate: s, endDate: e });
       const snap = await getDocs(q);
       if (snap.empty) { paging.done = true; return; }
