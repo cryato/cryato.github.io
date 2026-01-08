@@ -225,6 +225,8 @@
         messages: document.getElementById('messages')
       };
 
+      const url = new URL(location.href);
+
       // Populate bot dropdown from URL param 'bots' (comma-separated) or localStorage
       function populateBotDropdown() {
         const urlBots = url.searchParams.get('bots') || '';
@@ -242,8 +244,6 @@
         }
       }
       populateBotDropdown();
-
-      const url = new URL(location.href);
       function buildUrlWithAuth(path, extraParams) {
         const params = new URLSearchParams();
         // Only include context-specific extras; do NOT carry auth params anymore
