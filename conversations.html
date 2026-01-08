@@ -11,7 +11,7 @@
     header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #1f2937; position: sticky; top: 0; background: rgba(17,24,39,0.6); backdrop-filter: blur(8px); z-index: 10; }
     header h1 { font-size: 16px; margin: 0; }
     .toolbar { display: flex; gap: 8px; align-items: center; }
-    input[type="text"], input[type="date"] { background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 8px 10px; border-radius: 8px; outline: none; font-size: 13px; }
+    input[type="text"], input[type="date"], select { background: rgba(17,24,39,0.6); border: 1px solid #1f2937; color: var(--text); padding: 8px 10px; border-radius: 8px; outline: none; font-size: 13px; }
     .btn { appearance: none; border: 1px solid #283449; background: linear-gradient(180deg, #0b1224 0%, #0a1222 100%); color: #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
     .container { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; }
     .panel { background: rgba(17,24,39,0.65); border: 1px solid #1f2937; border-radius: 12px; }
@@ -36,11 +36,18 @@
     </div>
   </header>
 
-  <div class="container">
+    <div class="container">
     <div class="panel left">
       <div class="field">
+        <div class="label">Bot</div>
+        <select id="selBot">
+          <option value="">Main Bot</option>
+          <!-- Additional bot options populated from URL param or hardcoded -->
+        </select>
+      </div>
+      <div class="field">
         <div class="label">Customer ID</div>
-        <input id="inpUserId" type="text" placeholder="user_id (chat_id)" />
+        <input id="inpUserId" type="text" placeholder="user_id or botname+user_id" />
       </div>
       <div class="field">
         <div class="label">Start</div>
@@ -209,6 +216,7 @@
 
     async function main() {
       const els = {
+        selBot: document.getElementById('selBot'),
         inpUserId: document.getElementById('inpUserId'),
         inpStart: document.getElementById('inpStart'),
         inpEnd: document.getElementById('inpEnd'),
@@ -216,6 +224,24 @@
         btnReload: document.getElementById('btnReload'),
         messages: document.getElementById('messages')
       };
+
+      // Populate bot dropdown from URL param 'bots' (comma-separated) or localStorage
+      function populateBotDropdown() {
+        const urlBots = url.searchParams.get('bots') || '';
+        const storedBots = localStorage.getItem('conversations_bots') || '';
+        const botsStr = urlBots || storedBots || '';
+        if (botsStr) {
+          localStorage.setItem('conversations_bots', botsStr);
+          const botNames = botsStr.split(',').map(b => b.trim()).filter(Boolean);
+          for (const botName of botNames) {
+            const opt = document.createElement('option');
+            opt.value = botName;
+            opt.textContent = botName;
+            els.selBot.appendChild(opt);
+          }
+        }
+      }
+      populateBotDropdown();
 
       const url = new URL(location.href);
       function buildUrlWithAuth(path, extraParams) {
@@ -269,6 +295,20 @@
 
       const initialUserId = url.searchParams.get('user_id') || '';
       if (initialUserId) els.inpUserId.value = initialUserId;
+      
+      // Set initial bot selection from URL param 'bot'
+      const initialBot = url.searchParams.get('bot') || '';
+      if (initialBot) {
+        // Ensure the bot option exists (add it if not)
+        const existingOpt = Array.from(els.selBot.options).find(o => o.value === initialBot);
+        if (!existingOpt) {
+          const opt = document.createElement('option');
+          opt.value = initialBot;
+          opt.textContent = initialBot;
+          els.selBot.appendChild(opt);
+        }
+        els.selBot.value = initialBot;
+      }
 
       // default date range: last 7 days
       const today = new Date();
@@ -278,18 +318,45 @@
       els.inpEnd.value = toDateInput(today);
 
       // NOTE: chat_id has historically been written as either a number or a string.
-      // This UI queries BOTH representations and merges results so conversations remain visible.
+      // For main bot: chat_id is plain numeric ID (e.g., "6058404651")
+      // For other bots: chat_id is prefixed string (e.g., "otherbot6058404651")
+      // This UI queries BOTH representations for main bot and merges results so conversations remain visible.
       let paging = { byKey: Object.create(null), pageSize: 30 };
 
-      function chatIdCandidates(userIdRaw) {
+      /**
+       * Build chat_id candidates based on user input and selected bot.
+       * Supports:
+       * 1. User enters prefixed ID directly (e.g., "otherbot6058404651") - query as-is
+       * 2. User selects bot from dropdown + enters plain ID - construct prefixed ID
+       * 3. Main bot selected (empty) + numeric ID - query both numeric and string versions (legacy support)
+       */
+      function chatIdCandidates(userIdRaw, selectedBot) {
         const s = String(userIdRaw || '').trim();
         if (!s) return [];
         const out = [];
-        if (/^-?\d+$/.test(s)) {
-          const n = Number(s);
-          if (Number.isFinite(n)) out.push({ key: 'num', value: n });
+        
+        // Check if user entered a prefixed ID directly (letters/underscores followed by digits)
+        // This pattern matches: botname123456 but NOT plain 123456
+        const prefixMatch = s.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(-?\d+)$/);
+        if (prefixMatch) {
+          // User entered a prefixed format directly - use it as-is (string query only)
+          out.push({ key: 'prefixed', value: s });
+          return out;
         }
-        out.push({ key: 'str', value: s });
+        
+        // Otherwise, use dropdown selection to determine chat_id format
+        if (selectedBot) {
+          // Non-main bot selected: construct prefixed ID (botname + userId)
+          out.push({ key: 'str', value: `${selectedBot}${s}` });
+        } else {
+          // Main bot selected (empty string): query both numeric and string for legacy support
+          if (/^-?\d+$/.test(s)) {
+            const n = Number(s);
+            if (Number.isFinite(n)) out.push({ key: 'num', value: n });
+          }
+          out.push({ key: 'str', value: s });
+        }
+        
         // de-dupe by key+type+stringified value
         const seen = new Set();
         return out.filter((c) => {
@@ -424,7 +491,8 @@
         const userIdRaw = els.inpUserId.value.trim();
         if (!userIdRaw) { clearAndRenderEmpty(); return; }
         paging = { byKey: Object.create(null), pageSize: 25 };
-        const cands = chatIdCandidates(userIdRaw);
+        const selectedBot = els.selBot.value; // empty string for main bot
+        const cands = chatIdCandidates(userIdRaw, selectedBot);
         const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
         const e = els.inpEnd.value ? new Date(els.inpEnd.value) : null;
         const { docsAsc, anyNonEmpty } = await fetchMergedBatch(cands, s, e);
@@ -435,7 +503,8 @@
       async function loadMore() {
         const userIdRaw = els.inpUserId.value.trim();
         if (!userIdRaw) return;
-        const cands = chatIdCandidates(userIdRaw);
+        const selectedBot = els.selBot.value;
+        const cands = chatIdCandidates(userIdRaw, selectedBot);
         // if all candidates are done, stop
         if (cands.every((c) => ensurePagingKey(c.key).done)) return;
         const s = els.inpStart.value ? new Date(els.inpStart.value) : null;
@@ -454,7 +523,9 @@
       els.btnApply.addEventListener('click', () => {
         const u = new URL(location.href);
         const id = els.inpUserId.value.trim();
+        const bot = els.selBot.value;
         if (id) u.searchParams.set('user_id', id); else u.searchParams.delete('user_id');
+        if (bot) u.searchParams.set('bot', bot); else u.searchParams.delete('bot');
         history.replaceState(null, '', u.toString());
         loadInitial();
       });
