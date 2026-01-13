@@ -4067,6 +4067,10 @@
         delete def.trigger;
       }
       
+      // 3.5) Remove legacy flow-level global property - global should only be set on individual triggers
+      // The flow-level global:true was a bug that caused all triggers to become global unintentionally
+      delete def.global;
+      
       // 4) Upload new content (store as single-flow object)
       const newBody = JSON.stringify(def, null, 2);
       const upMain = await fetch(gcsUploadUrl(bucket, mainPath), {
