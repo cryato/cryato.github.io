@@ -2812,7 +2812,7 @@
       const cfg = step.sheets_get_row || {};
       const f1 = fieldText('spreadsheetId', cfg.spreadsheetId || '', (v) => { cfg.spreadsheetId = v; sync(); }, true);
       const f2 = fieldText('range', cfg.range || '', (v) => { cfg.range = v; sync(); }, true);
-      const f3 = fieldText('rowNumber', (cfg.rowNumber != null ? String(cfg.rowNumber) : ''), (v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) cfg.rowNumber = n; else delete cfg.rowNumber; sync(); }, true);
+      const f3 = fieldText('rowNumber', (cfg.rowNumber != null ? String(cfg.rowNumber) : ''), (v) => { const trimmed = String(v).trim(); if (!trimmed) { delete cfg.rowNumber; } else { const n = Number(trimmed); cfg.rowNumber = (Number.isFinite(n) && n > 0) ? n : trimmed; } sync(); }, true);
       const save = String((cfg && cfg.saveAs) || '');
       const saveField = fieldText('saveAs', save, (v) => { if (v) cfg.saveAs = v; else delete cfg.saveAs; sync(); }, true);
       function sync() { step.sheets_get_row = cfg; }
