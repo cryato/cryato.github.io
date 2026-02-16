@@ -483,7 +483,15 @@
         }
 
         const merged = Array.from(byId.values());
-        merged.sort((a, b) => tsToMillis(a.data().date) - tsToMillis(b.data().date)); // ASC for rendering
+        // ASC for rendering; use message_id as tiebreaker when timestamps share the same second
+        // (Telegram dates have only second precision, so messages within the same second need secondary ordering)
+        merged.sort((a, b) => {
+          const diff = tsToMillis(a.data().date) - tsToMillis(b.data().date);
+          if (diff !== 0) return diff;
+          const aId = parseInt(a.data().message_id, 10) || 0;
+          const bId = parseInt(b.data().message_id, 10) || 0;
+          return aId - bId;
+        });
         return { docsAsc: merged, anyNonEmpty };
       }
 
