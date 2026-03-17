@@ -4256,29 +4256,30 @@
       lastPublishClickAt = now;
 
       try { loadStoredTokenOnly(); } catch (_) {}
+
+      // Check auth BEFORE entering the saving state so the button stays interactive
+      if (!flowDoc || !currentFlowKey) { console.error('Publish error: Select a flow first.'); return; }
+      if (!hasValidToken()) {
+        showAuthToast('Your session expired. Please sign in to publish.', async () => {
+          els.btnPublish.click();
+        });
+        return;
+      }
+
       const prev = els.btnPublish.textContent;
       els.btnPublish.textContent = 'Saving…';
       els.btnPublish.disabled = true;
       let ok = false;
       try {
-        // Pre-checks to avoid noisy errors
-        if (!flowDoc || !currentFlowKey) throw new Error('Select a flow first.');
-        if (!hasValidToken()) {
-          // Prompt sign-in via toast and then retry publish without reloading the page
-          showAuthToast('Your session expired. Please sign in to publish.', async () => {
-            // Retry publish once after successful sign-in
-            els.btnPublish.click();
-          });
-          return;
-        }
         const { bucket } = getCfg();
         if (!bucket) throw new Error('Missing bucket');
 
         try {
           await saveCurrentFlowToCloudWithBackup();
         } catch (e) {
-          // If backend returns 401 within save, surface toast sign-in
           if (String(e && e.message || '').toLowerCase().includes('token') || String(e && e.message || '').toLowerCase().includes('401')) {
+            els.btnPublish.textContent = prev;
+            els.btnPublish.disabled = false;
             showAuthToast('Authentication failed. Sign in to continue.', async () => { els.btnPublish.click(); });
             return;
           }
