@@ -2826,6 +2826,7 @@
       container.appendChild(fieldText('provider_token', invoice.provider_token || '', (v) => { if (v) invoice.provider_token = v; else delete invoice.provider_token; step.send_invoice = invoice; }, true));
       container.appendChild(fieldText('photo_url', invoice.photo_url || '', (v) => { if (v) invoice.photo_url = v; else delete invoice.photo_url; step.send_invoice = invoice; }, true));
       container.appendChild(fieldText('user_id', invoice.user_id || '', (v) => { if (v) invoice.user_id = v; else delete invoice.user_id; step.send_invoice = invoice; }, true));
+      container.appendChild(fieldText('provider_data', invoice.provider_data || '', (v) => { if (v) invoice.provider_data = v; else delete invoice.provider_data; step.send_invoice = invoice; }, true));
       const kbInit = Array.isArray(step.keyboard) ? step.keyboard.join('\n') : '';
       const kbField = fieldText('keyboard', kbInit, (v) => {
         const lines = String(v || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
@@ -3508,6 +3509,7 @@
         const providerToken = document.createElement('input'); providerToken.type = 'text'; providerToken.placeholder = 'provider_token (optional, for real payments)';
         const photoUrl = document.createElement('input'); photoUrl.type = 'text'; photoUrl.placeholder = 'photo_url (optional, supports {{variables}})';
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
+        const providerData = document.createElement('input'); providerData.type = 'text'; providerData.placeholder = 'provider_data (optional JSON string, supports {{variables}})';
         const kb = document.createElement('textarea'); kb.placeholder = 'keyboard (optional; one per line; use [pay] for payment button, [url] for URL buttons)';
         formWrap.appendChild(field('title', title));
         formWrap.appendChild(field('description', description));
@@ -3517,6 +3519,7 @@
         formWrap.appendChild(field('provider_token', providerToken));
         formWrap.appendChild(field('photo_url', photoUrl));
         formWrap.appendChild(field('user_id', uid));
+        formWrap.appendChild(field('provider_data', providerData));
         formWrap.appendChild(field('keyboard', kb));
         const needEmailCb = document.createElement('input'); needEmailCb.type = 'checkbox'; needEmailCb.id = 'inv_need_email';
         needEmailCb.style.width = '16px'; needEmailCb.style.height = '16px';
@@ -3694,6 +3697,7 @@
         const providerToken = inputs && inputs[3];
         const photoUrl = inputs && inputs[4];
         const uid = inputs && inputs[5];
+        const providerData = inputs && inputs[6];
         const description = textareas && textareas[0];
         const prices = textareas && textareas[1];
         const kb = textareas && textareas[2];
@@ -3705,6 +3709,7 @@
         if (providerToken && providerToken.value) invoice.provider_token = String(providerToken.value);
         if (photoUrl && photoUrl.value) invoice.photo_url = String(photoUrl.value);
         if (uid && uid.value) invoice.user_id = String(uid.value);
+        if (providerData && providerData.value) invoice.provider_data = String(providerData.value);
         if (prices && prices.value && prices.value.trim()) {
           const pricesObj = parseJsonSafe(prices.value);
           if (Array.isArray(pricesObj)) invoice.prices = pricesObj;
