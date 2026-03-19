@@ -2843,6 +2843,17 @@
       invReplyKbWrap.appendChild(invReplyKbLabel);
       container.appendChild(invReplyKbWrap);
       invReplyKbCheck.addEventListener('change', () => { if (invReplyKbCheck.checked) step.reply_keyboard = true; else delete step.reply_keyboard; });
+      // need_email checkbox
+      const needEmailWrap = document.createElement('div'); needEmailWrap.className = 'field';
+      const needEmailLabel = document.createElement('label'); needEmailLabel.style.display = 'flex'; needEmailLabel.style.alignItems = 'center'; needEmailLabel.style.gap = '8px'; needEmailLabel.style.cursor = 'pointer';
+      const needEmailCheck = document.createElement('input'); needEmailCheck.type = 'checkbox';
+      needEmailCheck.checked = !!invoice.need_email;
+      needEmailCheck.style.width = '16px'; needEmailCheck.style.height = '16px';
+      const needEmailLabelText = document.createElement('span'); needEmailLabelText.textContent = 'need_email (request email from user)'; needEmailLabelText.style.color = '#94a3b8';
+      needEmailLabel.appendChild(needEmailCheck); needEmailLabel.appendChild(needEmailLabelText);
+      needEmailWrap.appendChild(needEmailLabel);
+      container.appendChild(needEmailWrap);
+      needEmailCheck.addEventListener('change', () => { if (needEmailCheck.checked) invoice.need_email = true; else delete invoice.need_email; step.send_invoice = invoice; });
       return;
     }
 
@@ -3507,6 +3518,13 @@
         formWrap.appendChild(field('photo_url', photoUrl));
         formWrap.appendChild(field('user_id', uid));
         formWrap.appendChild(field('keyboard', kb));
+        const needEmailCb = document.createElement('input'); needEmailCb.type = 'checkbox'; needEmailCb.id = 'inv_need_email';
+        needEmailCb.style.width = '16px'; needEmailCb.style.height = '16px';
+        const needEmailLbl = document.createElement('label'); needEmailLbl.style.display = 'flex'; needEmailLbl.style.alignItems = 'center'; needEmailLbl.style.gap = '8px'; needEmailLbl.style.cursor = 'pointer';
+        needEmailLbl.appendChild(needEmailCb);
+        const needEmailSpan = document.createElement('span'); needEmailSpan.textContent = 'need_email (request email from user)'; needEmailSpan.style.color = '#94a3b8';
+        needEmailLbl.appendChild(needEmailSpan);
+        formWrap.appendChild(field('need_email', needEmailLbl));
       } else if (t === 'from_json') {
         const ta = document.createElement('textarea');
         ta.placeholder = 'Paste a step object or an array of steps JSON';
@@ -3691,6 +3709,8 @@
           const pricesObj = parseJsonSafe(prices.value);
           if (Array.isArray(pricesObj)) invoice.prices = pricesObj;
         }
+        const needEmailEl = formWrap.querySelector('#inv_need_email');
+        if (needEmailEl && needEmailEl.checked) invoice.need_email = true;
         step.send_invoice = invoice;
         if (kb && kb.value) {
           const lines = String(kb.value || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
