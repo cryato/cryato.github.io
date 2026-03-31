@@ -2249,6 +2249,8 @@
       container.appendChild(fieldText('sticker_url', askStickerInit, (v) => { if (v) step.sticker_url = v; else delete step.sticker_url; }, true));
       const saveInit = step.saveAs != null ? String(step.saveAs) : '';
       container.appendChild(fieldText('saveAs', saveInit, (v) => { if (v) step.saveAs = v; else delete step.saveAs; }, true));
+      const askMsgIdInit = step.message_id != null ? String(step.message_id) : '';
+      container.appendChild(fieldText('message_id (edit mode)', askMsgIdInit, (v) => { if (v) step.message_id = v; else delete step.message_id; }, true));
       // Format keyboard for display: nested arrays show as "Button1|Button2" per row
       const kbInit = Array.isArray(step.keyboard) 
         ? step.keyboard.map(item => Array.isArray(item) ? item.join('|') : item).join('\n') 
@@ -3480,6 +3482,7 @@
         voiceRow.appendChild(voice);
         voiceRow.appendChild(voiceText);
         const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'Variable name (saveAs)';
+        const msgId = document.createElement('input'); msgId.type = 'text'; msgId.placeholder = 'message_id (optional, edit mode - edits existing message)';
         const kb = document.createElement('textarea'); kb.placeholder = 'Keyboard options (one per line, optional)';
         const ver = document.createElement('select'); ['','strict'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || '(none)'; ver.appendChild(o); });
         const syncVoiceVisibility = () => {
@@ -3493,6 +3496,7 @@
         formWrap.appendChild(field('audio_url', audio));
         formWrap.appendChild(field('is_voice', voiceRow));
         formWrap.appendChild(field('saveAs', save));
+        formWrap.appendChild(field('message_id (edit mode)', msgId));
         formWrap.appendChild(field('keyboard', kb));
         formWrap.appendChild(field('verification', ver));
         syncVoiceVisibility();
@@ -3667,6 +3671,7 @@
         const photo = inputs && inputs[0];
         const audio = inputs && inputs[1];
         const save = inputs && inputs[2];
+        const msgIdEl = inputs && inputs[3];
         const areas = formWrap.querySelectorAll('textarea');
         const kb = areas.length > 1 ? areas[1] : null;
         const ver = formWrap.querySelector('select');
@@ -3674,6 +3679,7 @@
         if (photo && photo.value) step.photo_url = String(photo.value);
         if (audio && audio.value) step.audio_url = String(audio.value);
         if (save && save.value) step.saveAs = String(save.value);
+        if (msgIdEl && msgIdEl.value) step.message_id = String(msgIdEl.value);
         const voiceEl = formWrap.querySelector('input[type="checkbox"]');
         if (voiceEl && voiceEl.checked && audio && audio.value) step.is_voice = true;
         if (kb && kb.value) step.keyboard = kb.value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
