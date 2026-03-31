@@ -2238,7 +2238,9 @@
       const askVideoInit = step.video_url != null ? String(step.video_url) : '';
       container.appendChild(fieldText('video_url', askVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
       const askAudioInit = step.audio_url != null ? String(step.audio_url) : '';
-      container.appendChild(fieldText('audio_url', askAudioInit, (v) => { if (v) step.audio_url = v; else delete step.audio_url; }, true));
+      let askAudioValue = askAudioInit;
+      container.appendChild(fieldText('audio_url', askAudioInit, (v) => { askAudioValue = v; if (v) step.audio_url = v; else delete step.audio_url; askVoiceToggle.syncVisibility(); }, true));
+      const askVoiceToggle = appendVoiceToggle(container, step, () => askAudioValue);
       const askAnimationInit = step.animation_url != null ? String(step.animation_url) : '';
       container.appendChild(fieldText('animation_url', askAnimationInit, (v) => { if (v) step.animation_url = v; else delete step.animation_url; }, true));
       const askDocumentInit = step.document_url != null ? String(step.document_url) : '';
@@ -2410,7 +2412,9 @@
       const sayVideoInit = step.video_url != null ? String(step.video_url) : '';
       container.appendChild(fieldText('video_url', sayVideoInit, (v) => { if (v) step.video_url = v; else delete step.video_url; }, true));
       const sayAudioInit = step.audio_url != null ? String(step.audio_url) : '';
-      container.appendChild(fieldText('audio_url', sayAudioInit, (v) => { if (v) step.audio_url = v; else delete step.audio_url; }, true));
+      let sayAudioValue = sayAudioInit;
+      container.appendChild(fieldText('audio_url', sayAudioInit, (v) => { sayAudioValue = v; if (v) step.audio_url = v; else delete step.audio_url; sayVoiceToggle.syncVisibility(); }, true));
+      const sayVoiceToggle = appendVoiceToggle(container, step, () => sayAudioValue);
       const sayAnimationInit = step.animation_url != null ? String(step.animation_url) : '';
       container.appendChild(fieldText('animation_url', sayAnimationInit, (v) => { if (v) step.animation_url = v; else delete step.animation_url; }, true));
       const sayDocumentInit = step.document_url != null ? String(step.document_url) : '';
@@ -2897,6 +2901,49 @@
     }
     wrap.appendChild(input);
     return wrap;
+  }
+
+  function appendVoiceToggle(container, step, getAudioValue) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '8px';
+    label.style.cursor = 'pointer';
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = !!step.is_voice;
+    input.style.width = '16px';
+    input.style.height = '16px';
+
+    const text = document.createElement('span');
+    text.textContent = 'is_voice';
+    text.style.color = '#94a3b8';
+
+    label.appendChild(input);
+    label.appendChild(text);
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+
+    const syncVisibility = () => {
+      const hasAudio = String(getAudioValue() || '').trim().length > 0;
+      wrap.style.display = hasAudio ? 'block' : 'none';
+      if (!hasAudio) {
+        input.checked = false;
+        delete step.is_voice;
+      }
+    };
+
+    input.addEventListener('change', () => {
+      if (input.checked && String(getAudioValue() || '').trim()) step.is_voice = true;
+      else delete step.is_voice;
+    });
+
+    syncVisibility();
+    return { syncVisibility };
   }
 
   // ---- Nested filters: parser, serializer, summary, and modal editor ----
@@ -3387,28 +3434,68 @@
         ta.placeholder = 'Message text (supports {{variables}})';
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
         const url2 = document.createElement('input'); url2.type = 'text'; url2.placeholder = 'video_url (optional, supports {{variables}})';
+        const audio = document.createElement('input'); audio.type = 'text'; audio.placeholder = 'audio_url (optional, supports {{variables}})';
+        const voice = document.createElement('input'); voice.type = 'checkbox';
+        voice.style.width = '16px'; voice.style.height = '16px';
+        const voiceRow = document.createElement('label');
+        voiceRow.style.display = 'none';
+        voiceRow.style.alignItems = 'center';
+        voiceRow.style.gap = '8px';
+        voiceRow.style.cursor = 'pointer';
+        const voiceText = document.createElement('span'); voiceText.textContent = 'Send as voice'; voiceText.style.color = '#94a3b8';
+        voiceRow.appendChild(voice);
+        voiceRow.appendChild(voiceText);
         const uid = document.createElement('input'); uid.type = 'text'; uid.placeholder = 'user_id (optional, supports {{variables}})';
         const saveAs = document.createElement('input'); saveAs.type = 'text'; saveAs.placeholder = 'saveAs (optional, stores Telegram response)';
         const msgId = document.createElement('input'); msgId.type = 'text'; msgId.placeholder = 'message_id (optional, edit mode - edits existing message)';
         const kb = document.createElement('textarea'); kb.placeholder = 'keyboard (optional; one per line; hidden settings in [..])';
+        const syncVoiceVisibility = () => {
+          const hasAudio = String(audio.value || '').trim().length > 0;
+          voiceRow.style.display = hasAudio ? 'flex' : 'none';
+          if (!hasAudio) voice.checked = false;
+        };
+        audio.addEventListener('input', syncVoiceVisibility);
         formWrap.appendChild(field('say', ta));
         formWrap.appendChild(field('photo_url', url));
         formWrap.appendChild(field('video_url', url2));
+        formWrap.appendChild(field('audio_url', audio));
+        formWrap.appendChild(field('is_voice', voiceRow));
         formWrap.appendChild(field('user_id', uid));
         formWrap.appendChild(field('saveAs', saveAs));
         formWrap.appendChild(field('message_id (edit mode)', msgId));
         formWrap.appendChild(field('keyboard', kb));
+        syncVoiceVisibility();
       } else if (t === 'ask') {
         const ta = document.createElement('textarea'); ta.placeholder = 'Question text';
         const url = document.createElement('input'); url.type = 'text'; url.placeholder = 'photo_url (optional, supports {{variables}})';
+        const audio = document.createElement('input'); audio.type = 'text'; audio.placeholder = 'audio_url (optional, supports {{variables}})';
+        const voice = document.createElement('input'); voice.type = 'checkbox';
+        voice.style.width = '16px'; voice.style.height = '16px';
+        const voiceRow = document.createElement('label');
+        voiceRow.style.display = 'none';
+        voiceRow.style.alignItems = 'center';
+        voiceRow.style.gap = '8px';
+        voiceRow.style.cursor = 'pointer';
+        const voiceText = document.createElement('span'); voiceText.textContent = 'Send as voice'; voiceText.style.color = '#94a3b8';
+        voiceRow.appendChild(voice);
+        voiceRow.appendChild(voiceText);
         const save = document.createElement('input'); save.type = 'text'; save.placeholder = 'Variable name (saveAs)';
         const kb = document.createElement('textarea'); kb.placeholder = 'Keyboard options (one per line, optional)';
         const ver = document.createElement('select'); ['','strict'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || '(none)'; ver.appendChild(o); });
+        const syncVoiceVisibility = () => {
+          const hasAudio = String(audio.value || '').trim().length > 0;
+          voiceRow.style.display = hasAudio ? 'flex' : 'none';
+          if (!hasAudio) voice.checked = false;
+        };
+        audio.addEventListener('input', syncVoiceVisibility);
         formWrap.appendChild(field('ask', ta));
         formWrap.appendChild(field('photo_url', url));
+        formWrap.appendChild(field('audio_url', audio));
+        formWrap.appendChild(field('is_voice', voiceRow));
         formWrap.appendChild(field('saveAs', save));
         formWrap.appendChild(field('keyboard', kb));
         formWrap.appendChild(field('verification', ver));
+        syncVoiceVisibility();
       } else if (t === 'close_open_questions') {
         const info = document.createElement('div');
         info.style.color = '#94a3b8';
@@ -3557,26 +3644,38 @@
         const inputs = formWrap.querySelectorAll('input[type="text"]');
         const photo = inputs && inputs[0];
         const video = inputs && inputs[1];
-        const uid = inputs && inputs[2];
-        const saveAsEl = inputs && inputs[3];
-        const msgIdEl = inputs && inputs[4];
+        const audio = inputs && inputs[2];
+        const uid = inputs && inputs[3];
+        const saveAsEl = inputs && inputs[4];
+        const msgIdEl = inputs && inputs[5];
         if (photo && photo.value) step.photo_url = String(photo.value);
         if (video && video.value) step.video_url = String(video.value);
+        if (audio && audio.value) step.audio_url = String(audio.value);
         if (uid && uid.value) step.user_id = String(uid.value);
         if (saveAsEl && saveAsEl.value) step.saveAs = String(saveAsEl.value);
         if (msgIdEl && msgIdEl.value) step.message_id = String(msgIdEl.value);
+        const voiceEl = formWrap.querySelector('input[type="checkbox"]');
+        if (voiceEl && voiceEl.checked && audio && audio.value) step.is_voice = true;
         const kbEl = formWrap.querySelector('textarea:nth-of-type(2)');
         if (kbEl && kbEl.value) {
           const lines = String(kbEl.value || '').split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
           if (lines.length > 0) step.keyboard = lines;
         }
       } else if (t === 'ask') {
-        const ta = q('textarea'); const save = formWrap.querySelector('input[type="text"]');
+        const ta = q('textarea');
+        const inputs = formWrap.querySelectorAll('input[type="text"]');
+        const photo = inputs && inputs[0];
+        const audio = inputs && inputs[1];
+        const save = inputs && inputs[2];
         const areas = formWrap.querySelectorAll('textarea');
         const kb = areas.length > 1 ? areas[1] : null;
         const ver = formWrap.querySelector('select');
         step.ask = String((ta && ta.value) || '');
+        if (photo && photo.value) step.photo_url = String(photo.value);
+        if (audio && audio.value) step.audio_url = String(audio.value);
         if (save && save.value) step.saveAs = String(save.value);
+        const voiceEl = formWrap.querySelector('input[type="checkbox"]');
+        if (voiceEl && voiceEl.checked && audio && audio.value) step.is_voice = true;
         if (kb && kb.value) step.keyboard = kb.value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
         if (ver && ver.value) step.verification = ver.value;
       } else if (t === 'close_open_questions') {
